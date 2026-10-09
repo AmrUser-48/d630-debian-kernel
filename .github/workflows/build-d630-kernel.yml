@@ -1,0 +1,66 @@
+name: Build D630 Debian kernel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - ".gitignore"
+      - "config/**"
+      - "docs/**"
+      - "scripts/**"
+      - ".github/workflows/build-d630-kernel.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d630-debian-kernel-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Debian Bookworm amd64 image, audited
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Reclaim runner disk space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost /usr/share/swift /usr/lib/mono \
+            /opt/hostedtoolcache/CodeQL
+          df -h
+          docker system df
+
+      - name: Build using Debian's native linux package rules
+        shell: bash
+        env:
+          SOURCE_VERSION: "6.1.187-1"
+          BUILD_JOBS: "2"
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --volume "$PWD:/work" \
+            --workdir /work \
+            --env SOURCE_VERSION \
+            --env BUILD_JOBS \
+            debian:bookworm \
+            bash -e -o pipefail -c 'bash scripts/build-d630-kernel.sh 2>&1 | tee build.log'
+
+      - name: Upload build package and full audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d630-debian-kernel-6.1.187-d630-core2
+          path: |
+            dist/
+            audit/
+            build.log
+          if-no-files-found: warn
+          retention-days: 90

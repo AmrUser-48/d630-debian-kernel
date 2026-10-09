@@ -1,16 +1,15 @@
-# Preparation state
+# Preparation and build state
 
-This repository is being initialized for the Debian Bookworm `linux` source package `6.1.187-1`.
+The input workflow prepares Debian Bookworm source package linux 6.1.187-1, the matching official reference image/config package, and Debian intel-microcode for the Intel Core 2 Duo T7250.
 
-The first workflow downloads:
-- `linux_6.1.187-1.dsc`
-- `linux_6.1.187.orig.tar.xz`
-- `linux_6.1.187-1.debian.tar.xz`
-- `linux-image-6.1.0-53-amd64_6.1.187-1_amd64.deb`
-- `linux-config-6.1_6.1.187-1_amd64.deb`
-- the Bookworm `intel-microcode` amd64 package
-- extracted `microcode/intel-ucode/06-0f-0d` plus Intel license/copyright and verification metadata
+The build workflow:
+- extracts and validates the pinned Debian source package;
+- runs Debian's amd64 setup target to capture the stock generated config;
+- applies config/d630-core2.config only to the amd64 runtime image target;
+- checks the exact kernel release 6.1.187-d630-core2 before the long compile;
+- builds only the runtime image package, with no debug/development targets;
+- audits effective configuration changes and rejects unexplained Debian module m-to-n conversions;
+- verifies that the Core 2 microcode bytes are built into vmlinux and includes the Intel license/copyright;
+- uploads the installable .deb, checksums, log and complete config/packaging audit.
 
-It extracts the two reference configs, validates Debian source extraction, and checks the Intel microcode blob for CPUID signature `06fd`. Source archives and binary packages live in the Actions artifact, not Git.
-
-**This workflow does not compile or package the D630 kernel. Wait for explicit approval before adding or running the custom build.**
+A successful CI package still requires a real boot test on the target Dell Latitude D630. Debian firmware for the Intel PRO/Wireless 3945ABG is separate from the embedded CPU microcode.
