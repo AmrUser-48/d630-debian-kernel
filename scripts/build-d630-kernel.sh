@@ -69,9 +69,13 @@ runuser -u builder -- python3 "$ROOT/scripts/apply-d630-build-policy.py" \
   "$SOURCE" "$AUDIT" "$ROOT/config/d630-core2.config"
 
 echo "=== Stage 7: preflight the merged config and exact kernel release ==="
-runuser -u builder -- "$SOURCE/scripts/kconfig/merge_config.sh" -m -O "$BUILD" \
-  "$AUDIT/debian-baseline.config" "$SOURCE/debian/config/d630-core2.config" \
-  > "$AUDIT/kconfig-merge.log" 2>&1
+(
+  # merge_config.sh creates temporary .config files in the caller's current directory,
+  # so run it from the source tree owned by builder rather than the root-owned /work.
+  cd "$SOURCE"
+  runuser -u builder -- "$SOURCE/scripts/kconfig/merge_config.sh" -m -O "$BUILD" \
+    "$AUDIT/debian-baseline.config" "$SOURCE/debian/config/d630-core2.config"
+) > "$AUDIT/kconfig-merge.log" 2>&1
 runuser -u builder -- make -C "$SOURCE" O="$BUILD" ARCH=x86 olddefconfig
 PREVIEW_RELEASE="$(runuser -u builder -- make --no-print-directory -s -C "$SOURCE" \
   O="$BUILD" ARCH=x86 LOCALVERSION=-d630-core2 kernelrelease)"
