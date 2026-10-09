@@ -19,6 +19,7 @@ The official image is a reference for the exact Debian-built configuration and p
 - Keep DRM/i915 and the relevant Intel AGP arrangement consistent with the exact Debian baseline.
 - Keep `CONFIG_MOUSE_PS2=m` (module name `psmouse`) and required PS/2 protocol support modular; keep module unloading enabled; preserve `MOUSEDEV` if stock Debian uses it.
 - Preserve netfilter/nftables features required by firewalld. In particular, audit the nftables FIB expression support for IPv4, IPv6 and inet tables.
+- Build in early microcode for the Intel Core 2 Duo T7250. Use the official Debian Bookworm `intel-microcode` package as provenance, validate the `06-0f-0d` blob with `iucode-tool`, and configure `CONFIG_EXTRA_FIRMWARE="intel-ucode/06-0f-0d"`, `CONFIG_EXTRA_FIRMWARE_DIR="/lib/firmware"`, `CONFIG_MICROCODE=y`, and `CONFIG_FW_LOADER=y`. Carry the upstream Intel license and copyright notice beside the resulting image package. Record the exact source package version and file digest because new microcode requires rebuilding the kernel.
 - Retain Debian userspace support (cgroups, namespaces, seccomp, AppArmor, eBPF and related facilities) unless a specific option is shown unnecessary.
 - Disable debug info and exclude debug/development binary packages from the published runtime release.
 
@@ -28,7 +29,7 @@ The official image is a reference for the exact Debian-built configuration and p
 2. Compare the Debian config package's amd64 config, the reference image's embedded `/boot/config-6.1.0-53-amd64`, and the proposed final config.
 3. Every changed option must be present in a generated diff and classified as retained, explicitly disabled, or promoted to built-in.
 4. Verify no retained Debian module was silently converted to `n`.
-5. Verify release string, package version, module directory, firmware contents, and the contents of the resulting `linux-image` package.
+5. Verify release string, package version, module directory, firmware contents, embedded microcode signature/revision, accompanying Intel microcode license/copyright, and the contents of the resulting `linux-image` package.
 
 ## Safety gate
 
