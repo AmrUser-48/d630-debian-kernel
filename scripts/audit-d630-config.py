@@ -111,7 +111,7 @@ for symbol in sorted(set(baseline) | set(final)):
     new = value(final, symbol)
     if old == new or old != "m" or new != "n":
         continue
-    if value(overlay, symbol) == "n":
+    if symbol in overlay and overlay[symbol] == "n":
         continue
     if any(symbol.startswith(prefix) for prefix in disabled_prefixes):
         continue
