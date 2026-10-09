@@ -1,0 +1,10 @@
+# Debian kernel input packages and extracted work
+/prepared-inputs/
+/work/
+/*.deb
+/*.dsc
+/*.changes
+/*.buildinfo
+/*.orig.tar.*
+/*.debian.tar.*
+/linux-6.1.*/
