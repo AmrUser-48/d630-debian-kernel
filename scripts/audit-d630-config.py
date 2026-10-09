@@ -44,8 +44,6 @@ required = {
     "DEBUG_INFO_BTF": "n",
     "DEBUG_INFO_BTF_MODULES": "n",
     "GDB_SCRIPTS": "n",
-    "BT_CMTP": "m",
-    "PTP_1588_CLOCK_OCP": "m",
     "NVME_CORE": "n",
     "NVME_FABRICS": "n",
     "NVME_TARGET": "n",
@@ -124,7 +122,7 @@ for symbol in ("CGROUPS", "NAMESPACES", "BPF_SYSCALL", "SECCOMP", "SECURITY_APPA
 # This is a narrow allow-list; all other Debian m -> n changes remain fatal.
 DISABLED_CHILDREN = {
     "CAN": ("CAN_", "NET_EMATCH_CANID"),
-    "ISDN": ("MISDN",),
+    "ISDN": ("MISDN", "BT_CMTP"),
     "INFINIBAND": (
         "INFINIBAND", "MLX4_INFINIBAND", "MLX5_INFINIBAND",
         "NET_9P_RDMA", "RDS_RDMA", "SUNRPC_XPRT_RDMA",
@@ -146,7 +144,7 @@ DISABLED_CHILDREN = {
     ),
     "MTD": (
         "MTD", "FTL", "INFTL", "NFTL", "RFD_FTL", "SSFDC",
-        "JFFS2_FS", "UBIFS_FS", "BCH",
+        "JFFS2_FS", "UBIFS_FS", "BCH", "PTP_1588_CLOCK_OCP",
     ),
     "BLK_DEV_NVME": ("NVME", "BLK_DEV_NVME"),
     "MEDIA_DIGITAL_TV_SUPPORT": ("DVB",),
