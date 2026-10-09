@@ -23,7 +23,8 @@ The official image config is a comparison baseline for the hardware stack. The D
 - Preserve nftables FIB expression support for IPv4, IPv6 and inet tables as modules.
 - Embed early microcode for Intel Core 2 Duo T7250 from Debian Bookworm's intel-microcode package. Validate intel-ucode/06-0f-0d against CPUID signature 0x000006fd, configure CONFIG_EXTRA_FIRMWARE and CONFIG_EXTRA_FIRMWARE_DIR, and carry the Intel license and copyright.
 - Retain Debian userspace support (cgroups, namespaces, seccomp, AppArmor, eBPF and related facilities) at baseline values.
-- Disable debug information. Build only the runtime image target; do not build debug/development packages.
+- Select `CONFIG_DEBUG_INFO_NONE=y` so Kconfig cannot re-enable toolchain-default DWARF debug info. Build only the runtime image target; do not build debug/development packages.
+- Disable all NVMe host/fabric/target support, DVB digital-TV, radio-adapter, SDR and media-test APIs; retain camera/video infrastructure.
 
 ## Explicit exclusions
 

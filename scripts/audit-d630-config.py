@@ -38,6 +38,27 @@ def value(config, symbol):
 required = {
     "MCORE2": "y",
     "GENERIC_CPU": "n",
+    "DEBUG_INFO_NONE": "y",
+    "DEBUG_INFO": "n",
+    "DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT": "n",
+    "DEBUG_INFO_BTF": "n",
+    "DEBUG_INFO_BTF_MODULES": "n",
+    "GDB_SCRIPTS": "n",
+    "BT_CMTP": "m",
+    "PTP_1588_CLOCK_OCP": "m",
+    "NVME_CORE": "n",
+    "NVME_FABRICS": "n",
+    "NVME_TARGET": "n",
+    "NVME_FC": "n",
+    "NVME_TCP": "n",
+    "NVME_RDMA": "n",
+    "NVME_TARGET_FC": "n",
+    "NVME_TARGET_TCP": "n",
+    "NVME_TARGET_RDMA": "n",
+    "MEDIA_DIGITAL_TV_SUPPORT": "n",
+    "MEDIA_RADIO_SUPPORT": "n",
+    "MEDIA_SDR_SUPPORT": "n",
+    "MEDIA_TEST_SUPPORT": "n",
     "MICROCODE": "y",
     "MICROCODE_INTEL": "y",
     "FW_LOADER": "y",
@@ -68,9 +89,6 @@ required = {
     "NFT_FIB_INET": "m",
     "NFT_FIB_IPV4": "m",
     "NFT_FIB_IPV6": "m",
-    "DEBUG_INFO": "n",
-    "DEBUG_INFO_BTF": "n",
-    "GDB_SCRIPTS": "n",
     "CAN": "n",
     "ISDN": "n",
     "INFINIBAND": "n",
@@ -80,7 +98,6 @@ required = {
     "IEEE802154": "n",
     "USB_GADGET": "n",
     "BLK_DEV_NVME": "n",
-    "NVME_CORE": "n",
     "DVB_CORE": "n",
     "RADIO_ADAPTERS": "n",
     "MTD": "n",
@@ -102,12 +119,46 @@ for symbol in ("CGROUPS", "NAMESPACES", "BPF_SYSCALL", "SECCOMP", "SECURITY_APPA
     if expected in ("y", "m") and actual != expected:
         errors.append("CONFIG_" + symbol + " changed from Debian baseline " + expected + " to " + actual)
 
-disabled_prefixes = (
-    "CAN", "ISDN", "INFINIBAND", "RDMA", "FIREWIRE", "NFC", "WIMAX",
-    "IEEE802154", "6LOWPAN", "USB_GADGET", "USB_CONFIGFS", "USB_F_",
-    "NVME", "BLK_DEV_NVME", "DVB", "RADIO_ADAPTERS", "MEDIA_TUNER",
-    "MTD", "DEBUG_INFO", "GDB_SCRIPTS",
-)
+# These are explicit child symbols whose Kconfig dependencies become unavailable
+# only because the matching top-level exclusion in config/d630-core2.config is off.
+# This is a narrow allow-list; all other Debian m -> n changes remain fatal.
+DISABLED_CHILDREN = {
+    "CAN": ("CAN_", "NET_EMATCH_CANID"),
+    "ISDN": ("MISDN",),
+    "INFINIBAND": (
+        "INFINIBAND", "MLX4_INFINIBAND", "MLX5_INFINIBAND",
+        "NET_9P_RDMA", "RDS_RDMA", "SUNRPC_XPRT_RDMA",
+        "NVME_RDMA", "NVME_TARGET_RDMA", "SMC",
+    ),
+    "FIREWIRE": (
+        "FIREWIRE", "DVB_FIREDTV", "SBP_TARGET",
+        "SND_FIREWIRE", "SND_FIREWORKS", "SND_BEBOB",
+        "SND_DICE", "SND_FIREFACE", "SND_ISIGHT", "SND_OXFW",
+    ),
+    "NFC": ("NFC",),
+    "IEEE802154": ("IEEE802154", "MAC802154"),
+    "6LOWPAN": ("6LOWPAN",),
+    "USB_GADGET": (
+        "USB_GADGET", "USBIP_VUDC", "USB_DUMMY_HCD", "USB_EG20T",
+        "USB_ETH", "USB_FUNCTIONFS", "USB_G_SERIAL", "USB_LIBCOMPOSITE",
+        "USB_NET2280", "USB_U_AUDIO", "USB_U_ETHER", "USB_U_SERIAL",
+        "USB_CONFIGFS", "USB_F_",
+    ),
+    "MTD": (
+        "MTD", "FTL", "INFTL", "NFTL", "RFD_FTL", "SSFDC",
+        "JFFS2_FS", "UBIFS_FS", "BCH",
+    ),
+    "BLK_DEV_NVME": ("NVME", "BLK_DEV_NVME"),
+    "MEDIA_DIGITAL_TV_SUPPORT": ("DVB",),
+    "MEDIA_RADIO_SUPPORT": ("RADIO_ADAPTERS",),
+}
+
+def disabled_by_parent(symbol):
+    for parent, prefixes in DISABLED_CHILDREN.items():
+        if value(overlay, parent) == "n" and any(symbol.startswith(p) for p in prefixes):
+            return True
+    return False
+
 for symbol in sorted(set(baseline) | set(final)):
     old = value(baseline, symbol)
     new = value(final, symbol)
@@ -115,7 +166,7 @@ for symbol in sorted(set(baseline) | set(final)):
         continue
     if symbol in overlay and overlay[symbol] == "n":
         continue
-    if any(symbol.startswith(prefix) for prefix in disabled_prefixes):
+    if disabled_by_parent(symbol):
         continue
     errors.append("Retained Debian module silently changed m -> n: CONFIG_" + symbol)
 
@@ -133,7 +184,7 @@ for symbol in sorted(set(baseline) | set(final)):
         classification = "promoted/required built-in"
     elif requested == "m" and new == "m":
         classification = "explicitly retained as module"
-    elif old == "m" and new == "n" and any(symbol.startswith(prefix) for prefix in disabled_prefixes):
+    elif old == "m" and new == "n" and disabled_by_parent(symbol):
         classification = "disabled by documented parent subsystem exclusion"
     elif old == "m" and new == "y":
         classification = "promoted by Kconfig dependency"
@@ -158,6 +209,8 @@ if errors:
 
 (audit_path / "config-audit-report.txt").write_text(
     "PASS: Core 2 CPU optimization and required D630 configuration values validated.\n"
+    "PASS: debug information is disabled for the stripped runtime kernel.\n"
+    "PASS: NVMe, digital-TV and radio support are disabled as requested.\n"
     "PASS: DRM, i915 and Intel AGP match the official Debian reference config.\n"
     "PASS: cgroups, namespaces, eBPF, seccomp, AppArmor and nftables retain Debian baseline values.\n"
     "PASS: no unexplained Debian module m -> n conversion.\n"
