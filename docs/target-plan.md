@@ -30,7 +30,7 @@ The overlay disables CAN, ISDN, InfiniBand/RDMA, FireWire, NFC, WiMAX, IEEE 802.
 
 ## Build and validation
 
-The approved build workflow uses Debian's native binary-arch_amd64_none_amd64_image target. It saves Debian's generated config before policy changes, checks kernelrelease equals 6.1.187-d630-core2 before compilation, and records the source Makefile/rules changes. Post-build checks validate configuration values, reject unexplained module m-to-n conversions, check package paths and metadata, and verify the exact microcode bytes occur in vmlinux. The Intel license/copyright is added to the package and artifact.
+The approved build workflow uses Debian's native binary-arch_amd64_none_amd64_real_image target. It saves Debian's generated config before policy changes, checks kernelrelease equals 6.1.187-d630-core2 before compilation, and records the source Makefile/rules changes. Post-build checks validate configuration values, reject unexplained module m-to-n conversions, check package paths and metadata, and verify the exact microcode bytes occur in vmlinux. The Intel license/copyright is added to the package and artifact.
 
 The input-preparation workflow does not build a custom kernel. The build workflow is now the approved build path. A physical boot test cannot be performed by hosted CI and remains outstanding.
 

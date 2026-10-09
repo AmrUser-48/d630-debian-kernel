@@ -27,7 +27,7 @@ The Intel PRO/Wireless 3945ABG firmware remains separate from the kernel microco
 ## Workflows and artifacts
 
 - Prepare Debian inputs: downloads the signed Debian source archives, official reference image/config packages, microcode, licenses and audit metadata. Source files and .deb inputs are retained as an Actions artifact, not committed into Git.
-- Build D630 kernel: builds the amd64 runtime image using Debian's native binary-arch_amd64_none_amd64_image target, verifies the exact release and final config, checks the built-in microcode bytes, and uploads the image .deb with the audit and checksums.
+- Build D630 kernel: builds the amd64 runtime image using Debian's native binary-arch_amd64_none_amd64_real_image target, verifies the exact release and final config, checks the built-in microcode bytes, and uploads the image .deb with the audit and checksums.
 
 The build workflow runs for relevant changes on main or can be started from GitHub Actions with workflow_dispatch. Download the generated package directly from the build run's Artifacts section. Debug and development packages are not built or published.
 
