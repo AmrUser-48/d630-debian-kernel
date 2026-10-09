@@ -55,7 +55,7 @@ chown -R builder:builder "$WORK" "$AUDIT" "$SOURCE"
 
 echo "=== Stage 5: generate Debian's stock amd64 config first ==="
 runuser -u builder -- env DEB_RULES_REQUIRES_ROOT=no \
-  make -C "$SOURCE" -f debian/rules.gen setup_amd64_none_amd64
+  make -C "$SOURCE" -f debian/rules.gen setup_amd64_none_amd64_real_image
 if ! test -s "$BUILD/.config"; then
   find "$SOURCE/debian/build" -maxdepth 5 -type f -name .config -print >&2 || true
   echo "Debian setup target did not create $BUILD/.config" >&2
@@ -90,7 +90,7 @@ runuser -u builder -- env \
   DEB_RULES_REQUIRES_ROOT=no \
   DEB_BUILD_OPTIONS="parallel=$BUILD_JOBS" \
   MAKEFLAGS="-j$BUILD_JOBS" \
-  make -C "$SOURCE" -f debian/rules.gen binary-arch_amd64_none_amd64_image
+  make -C "$SOURCE" -f debian/rules.gen binary-arch_amd64_none_amd64_real_image
 
 echo "=== Stage 9: validate the built config and embedded microcode ==="
 test -s "$BUILD/.config"
@@ -196,7 +196,7 @@ fi
 mkdir -p "$NEW_DOC"
 cp "$INPUTS/microcode/INTEL-MICROCODE-LICENSE.txt" "$NEW_DOC/INTEL-MICROCODE-LICENSE.txt"
 cp "$INPUTS/microcode/INTEL-MICROCODE-COPYRIGHT.txt" "$NEW_DOC/INTEL-MICROCODE-COPYRIGHT.txt"
-(cd "$REPACK" && find . -type f ! -path './DEBIAN/*' -print0 | sort -z | xargs -0 md5sum) \
+(cd "$REPACK" && find . -type f ! -path './DEBIAN/*' -print0 | sort -z | xargs -0 md5sum | sed 's/  \.\//  /') \
   > "$REPACK/DEBIAN/md5sums"
 
 test -s "$REPACK/boot/vmlinuz-$EXPECTED_RELEASE" || {
@@ -229,7 +229,7 @@ dpkg-deb -c "$DEB_OUTPUT" > "$AUDIT/final-image-file-list.txt"
   echo "Binary package: $(dpkg-deb -f "$DEB_OUTPUT" Package)"
   echo "Binary package version: $(dpkg-deb -f "$DEB_OUTPUT" Version)"
   echo "Architecture: $(dpkg-deb -f "$DEB_OUTPUT" Architecture)"
-  echo "Build target: binary-arch_amd64_none_amd64_image (Debian native rules)"
+  echo "Build target: binary-arch_amd64_none_amd64_real_image (Debian native rules)"
   echo "Configuration: Debian-generated amd64 baseline + config/d630-core2.config"
   echo "Embedded microcode: Intel Core 2 T7250, CPUID 0x000006fd"
   echo "Microcode SHA-256: $(sha256sum "$INPUTS/microcode/intel-ucode/06-0f-0d" | awk '{print $1}')"

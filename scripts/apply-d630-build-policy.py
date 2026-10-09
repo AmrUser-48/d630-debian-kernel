@@ -38,9 +38,9 @@ for key, value in (("VERSION", "6"), ("PATCHLEVEL", "1"), ("SUBLEVEL", "187"), (
 makefile.write_text(make_after)
 
 lines = rules_before.splitlines(keepends=True)
-target_indices = [i for i, line in enumerate(lines) if line.startswith("binary-arch_amd64_none_amd64_image:")]
+target_indices = [i for i, line in enumerate(lines) if line.startswith("binary-arch_amd64_none_amd64_real_image:")]
 if len(target_indices) != 1:
-    raise SystemExit("Expected exactly one binary-arch_amd64_none_amd64_image target; got " + str(len(target_indices)))
+    raise SystemExit("Expected exactly one binary-arch_amd64_none_amd64_real_image target; got " + str(len(target_indices)))
 
 index = target_indices[0]
 recipe_index = None
@@ -84,7 +84,7 @@ rules.write_text(rules_after)
 )
 (audit / "build-policy-applied.txt").write_text(
     "Debian source package: linux 6.1.187-1\n"
-    "Native build target: binary-arch_amd64_none_amd64_image\n"
+    "Native build target: binary-arch_amd64_none_amd64_real_image\n"
     "Source Makefile: VERSION=6 PATCHLEVEL=1 SUBLEVEL=187 EXTRAVERSION empty\n"
     "Debian ABI name passed to image target: 6.1.187\n"
     "Debian LOCALVERSION and LOCALVERSION_IMAGE: -d630-core2\n"
