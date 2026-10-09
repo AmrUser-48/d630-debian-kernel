@@ -19,21 +19,26 @@ export LANG=C
 rm -rf "$OUT"
 mkdir -p "$OUT/source" "$OUT/reference" "$OUT/config" "$OUT/metadata"
 
-# Use only the Debian 12 Bookworm and Bookworm security suites.
+# Use only Debian 12 Bookworm and Bookworm security. The minimal container may
+# have no CA certificates, so bootstrap over HTTP while still verifying Debian's
+# signed Release/InRelease metadata with APT. Install the CA bundle, then switch
+# all final package access to HTTPS.
 rm -f /etc/apt/sources.list
 mkdir -p /etc/apt/sources.list.d
 rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources
 cat > /etc/apt/sources.list.d/d630-bookworm.list <<'SOURCES'
-deb https://deb.debian.org/debian bookworm main
-deb https://deb.debian.org/debian bookworm-updates main
-deb https://security.debian.org/debian-security bookworm-security main
-deb-src https://deb.debian.org/debian bookworm main
-deb-src https://deb.debian.org/debian bookworm-updates main
-deb-src https://security.debian.org/debian-security bookworm-security main
+deb http://deb.debian.org/debian bookworm main
+deb http://deb.debian.org/debian bookworm-updates main
+deb http://security.debian.org/debian-security bookworm-security main
+deb-src http://deb.debian.org/debian bookworm main
+deb-src http://deb.debian.org/debian bookworm-updates main
+deb-src http://security.debian.org/debian-security bookworm-security main
 SOURCES
 
 apt-get update
 apt-get install -y --no-install-recommends ca-certificates dpkg-dev xz-utils
+sed -i 's#http://#https://#g' /etc/apt/sources.list.d/d630-bookworm.list
+apt-get update
 
 {
   echo "Target Debian source package: linux=$SOURCE_VERSION"
@@ -86,7 +91,7 @@ test "$(dpkg-parsechangelog -l "$SOURCE_TREE/debian/changelog" -S Version)" = "$
   apt-get download "$IMAGE_PACKAGE=$IMAGE_VERSION" "$CONFIG_PACKAGE=$CONFIG_VERSION"
 )
 IMAGE_DEB="$(find "$WORK" -maxdepth 1 -type f -name "${IMAGE_PACKAGE}_${IMAGE_VERSION}_amd64.deb" -print -quit)"
-CONFIG_DEB="$(find "$WORK" -maxdepth 1 -type f -name "${CONFIG_PACKAGE}_${CONFIG_VERSION}_all.deb" -print -quit)"
+CONFIG_DEB="$(find "$WORK" -maxdepth 1 -type f -name "${CONFIG_PACKAGE}_${CONFIG_VERSION}_*.deb" -print -quit)"
 test -n "$IMAGE_DEB" && test -s "$IMAGE_DEB"
 test -n "$CONFIG_DEB" && test -s "$CONFIG_DEB"
 
@@ -103,7 +108,11 @@ check_field "$IMAGE_DEB" Version "$IMAGE_VERSION"
 check_field "$IMAGE_DEB" Architecture amd64
 check_field "$CONFIG_DEB" Package "$CONFIG_PACKAGE"
 check_field "$CONFIG_DEB" Version "$CONFIG_VERSION"
-check_field "$CONFIG_DEB" Architecture all
+CONFIG_ARCH="$(dpkg-deb -f "$CONFIG_DEB" Architecture)"
+case "$CONFIG_ARCH" in
+  all|amd64) ;;
+  *) echo "Unexpected $CONFIG_PACKAGE architecture: $CONFIG_ARCH" >&2; exit 1 ;;
+esac
 
 cp "$IMAGE_DEB" "$OUT/reference/"
 cp "$CONFIG_DEB" "$OUT/reference/"
