@@ -36,6 +36,8 @@ def value(config, symbol):
     return config.get(symbol, "n")
 
 required = {
+    "MCORE2": "y",
+    "GENERIC_CPU": "n",
     "MICROCODE": "y",
     "MICROCODE_INTEL": "y",
     "FW_LOADER": "y",
@@ -155,7 +157,7 @@ if errors:
     raise SystemExit(1)
 
 (audit_path / "config-audit-report.txt").write_text(
-    "PASS: required D630 configuration values validated.\n"
+    "PASS: Core 2 CPU optimization and required D630 configuration values validated.\n"
     "PASS: DRM, i915 and Intel AGP match the official Debian reference config.\n"
     "PASS: cgroups, namespaces, eBPF, seccomp, AppArmor and nftables retain Debian baseline values.\n"
     "PASS: no unexplained Debian module m -> n conversion.\n"
