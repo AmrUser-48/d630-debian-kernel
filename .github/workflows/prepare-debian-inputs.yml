@@ -1,0 +1,50 @@
+name: Prepare Debian 12 kernel inputs (no build)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - ".gitignore"
+      - "docs/**"
+      - "scripts/**"
+      - ".github/workflows/prepare-debian-inputs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d630-debian-input-preparation
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Download and verify Debian 6.1.187-1 inputs
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    container:
+      image: debian:bookworm
+    env:
+      SOURCE_VERSION: "6.1.187-1"
+      IMAGE_PACKAGE: "linux-image-6.1.0-53-amd64"
+      IMAGE_VERSION: "6.1.187-1"
+      CONFIG_PACKAGE: "linux-config-6.1"
+      CONFIG_VERSION: "6.1.187-1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Fetch source and official reference packages
+        shell: bash
+        run: |
+          set -euxo pipefail
+          bash scripts/prepare-debian-inputs.sh
+
+      - name: Upload prepared inputs for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-bookworm-linux-6.1.187-1-inputs
+          path: prepared-inputs/
+          if-no-files-found: error
+          retention-days: 30
