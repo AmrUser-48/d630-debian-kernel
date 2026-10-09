@@ -152,12 +152,23 @@ DISABLED_CHILDREN = {
     ),
     "BLK_DEV_NVME": ("NVME", "BLK_DEV_NVME"),
     "MEDIA_DIGITAL_TV_SUPPORT": ("DVB",),
-    "MEDIA_RADIO_SUPPORT": ("RADIO_ADAPTERS",),
+    "MEDIA_RADIO_SUPPORT": (
+        "RADIO_", "RADIO_ADAPTERS",
+        "USB_DSBR", "USB_KEENE", "USB_MA901", "USB_MR800", "USB_RAREMONO",
+    ),
+    "MEDIA_SDR_SUPPORT": ("USB_AIRSPY", "USB_HACKRF", "USB_MSI2500"),
+    "MEDIA_TEST_SUPPORT": ("VIDEO_VIM2M", "VIDEO_VICODEC", "VIDEO_VIMC", "VIDEO_VIVID", "DVB_VIDTV"),
 }
 
 def disabled_by_parent(symbol):
     for parent, prefixes in DISABLED_CHILDREN.items():
-        if value(overlay, parent) == "n" and any(symbol.startswith(p) for p in prefixes):
+        if value(overlay, parent) != "n":
+            continue
+        if any(symbol.startswith(p) for p in prefixes):
+            return True
+        # A small number of digital-TV integrations are named *_DVB rather
+        # than DVB_*; they disappear when the digital-TV API is disabled.
+        if parent == "MEDIA_DIGITAL_TV_SUPPORT" and symbol.endswith("_DVB"):
             return True
     return False
 
