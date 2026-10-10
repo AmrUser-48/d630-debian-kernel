@@ -56,7 +56,14 @@ filesystem_keep = {
 filesystem_disabled = sorted(
     symbol for symbol in config_symbols
     if (symbol.endswith("_FS") and symbol not in filesystem_keep)
-    or symbol in {"SQUASHFS", "CRAMFS", "ROMFS"}
+    or symbol in {
+        "SQUASHFS", "CRAMFS", "ROMFS",
+        # Network/distributed filesystems whose symbols do not end in _FS.
+        "CIFS", "CIFS_UPCALL", "CIFS_XATTR", "CIFS_POSIX",
+        "NFS_V2", "NFS_V3", "NFS_V4", "NFS_SWAP",
+        "NFSD", "NFSD_V2", "NFSD_V3", "NFSD_V4",
+        "SMB_SERVER", "SMB_SERVER_SMBDIRECT",
+    }
 )
 # Disable unrelated discrete/vendor GPU drivers. Keep Intel i915 and shared DRM helpers.
 gpu_prefixes = (
