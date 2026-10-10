@@ -141,6 +141,12 @@ UNWANTED_GPU_PREFIXES = (
     "DRM_PL111", "DRM_SUN4I", "DRM_FSL_DCU", "DRM_ARMADA",
     "DRM_MEDIATEK", "DRM_SPRD", "DRM_STI", "DRM_RCAR_DU",
     "DRM_XEN", "DRM_POWERVR", "DRM_LOONGSON", "DRM_SSD130X",
+    # Legacy framebuffer GPU drivers unrelated to the D630's Intel i915.
+    "FB_AMDGPU", "FB_NVIDIA", "FB_RADEON", "FB_ATY", "FB_SIS", "FB_VIA",
+    "FB_MATROX", "FB_CYBER2000", "FB_TRIDENT", "FB_S3", "FB_I810",
+    "FB_3DFX", "FB_VOODOO", "FB_PM2", "FB_PM3", "FB_NEOMAGIC",
+    "FB_TG3", "FB_RIVA", "FB_CIRRUS", "FB_SAVAGE", "FB_BROADSHEET",
+    "FB_SM", "FB_ARK", "FB_KYRO", "FB_VIRTUAL",
 )
 unexpected_gpu = sorted(
     symbol for symbol, setting in final.items()
