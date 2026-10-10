@@ -224,7 +224,11 @@ def disabled_by_parent(symbol):
     # The build script explicitly disables non-allowlisted SND_* symbols.
     if symbol.startswith("SND_") and symbol not in SOUND_KEEP:
         return True
-    if ((symbol.endswith("_FS") and symbol not in FILESYSTEM_KEEP) or symbol in {"SQUASHFS", "CRAMFS", "ROMFS"}):
+    if ((symbol.endswith("_FS") and symbol not in FILESYSTEM_KEEP) or symbol in {
+        "SQUASHFS", "CRAMFS", "ROMFS", "CIFS", "CIFS_UPCALL", "CIFS_XATTR",
+        "CIFS_POSIX", "NFS_V2", "NFS_V3", "NFS_V4", "NFS_SWAP",
+        "NFSD", "NFSD_V2", "NFSD_V3", "NFSD_V4", "SMB_SERVER", "SMB_SERVER_SMBDIRECT",
+    }):
         return True
     if any(symbol.startswith(prefix) for prefix in UNWANTED_GPU_PREFIXES):
         return True
