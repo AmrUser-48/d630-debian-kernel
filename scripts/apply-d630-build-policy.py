@@ -24,13 +24,19 @@ if not overlay.is_file():
 
 make_before = makefile.read_text()
 rules_before = rules.read_text()
+source_version = __import__("os").environ.get("SOURCE_VERSION", "6.18.15-1~bpo13+1")
+version_match = re.match(r"^(\d+)\.(\d+)\.(\d+)", source_version)
+if not version_match:
+    raise SystemExit("Cannot parse kernel upstream version from SOURCE_VERSION: " + source_version)
+kernel_major, kernel_patchlevel, kernel_sublevel = version_match.groups()
+kernel_version = ".".join(version_match.groups())
 (audit / "kernel-Makefile-before.txt").write_text(make_before)
 (audit / "rules.gen-before.txt").write_text(rules_before)
 target_config.parent.mkdir(parents=True, exist_ok=True)
 target_config.write_text(overlay.read_text())
 
 make_after = make_before
-for key, value in (("VERSION", "6"), ("PATCHLEVEL", "1"), ("SUBLEVEL", "187"), ("EXTRAVERSION", "")):
+for key, value in (("VERSION", kernel_major), ("PATCHLEVEL", kernel_patchlevel), ("SUBLEVEL", kernel_sublevel), ("EXTRAVERSION", "")):
     pattern = re.compile(r"(?m)^" + re.escape(key) + r"\s*=.*$")
     make_after, count = pattern.subn(key + " = " + value, make_after, count=1)
     if count != 1:
@@ -63,7 +69,7 @@ if "debian/config/d630-core2.config" not in kconfig_parts:
 recipe = recipe[:kconfig_match.start(1)] + " ".join(kconfig_parts) + recipe[kconfig_match.end(1):]
 
 for pattern, replacement in (
-    (r"\bABINAME='[^']*'", "ABINAME='6.1.187'"),
+    (r"\bABINAME='[^']*'", "ABINAME='" + kernel_version + "'"),
     (r"\bLOCALVERSION='[^']*'", "LOCALVERSION='-d630-core2'"),
     (r"\bLOCALVERSION_IMAGE='[^']*'", "LOCALVERSION_IMAGE='-d630-core2'"),
 ):
@@ -83,10 +89,10 @@ rules.write_text(rules_after)
                          fromfile="Debian-rules.gen.before", tofile="Debian-rules.gen.after"))
 )
 (audit / "build-policy-applied.txt").write_text(
-    "Debian source package: linux 6.1.187-1\n"
+    "Debian source package: linux " + source_version + "\n"
     "Native build target: binary-arch_amd64_none_amd64_real_image\n"
-    "Source Makefile: VERSION=6 PATCHLEVEL=1 SUBLEVEL=187 EXTRAVERSION empty\n"
-    "Debian ABI name passed to image target: 6.1.187\n"
+    "Source Makefile: VERSION=" + kernel_major + " PATCHLEVEL=" + kernel_patchlevel + " SUBLEVEL=" + kernel_sublevel + " EXTRAVERSION empty\n"
+    "Debian ABI name passed to image target: " + kernel_version + "\n"
     "Debian LOCALVERSION and LOCALVERSION_IMAGE: -d630-core2\n"
     "The image target KCONFIG chain includes debian/config/d630-core2.config last\n"
     "The generated config diff is checked by audit-d630-config.py\n"
