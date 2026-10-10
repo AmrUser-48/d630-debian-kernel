@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply a narrowly scoped D630 policy to Debian's native amd64 image target."""
+"""Apply a D630-specific policy to Debian's native amd64 image target."""
 
 from difflib import unified_diff
 from pathlib import Path
@@ -17,17 +17,49 @@ audit.mkdir(parents=True, exist_ok=True)
 makefile = source / "Makefile"
 rules = source / "debian/rules.gen"
 target_config = source / "debian/config/d630-core2.config"
+baseline_config = source / "debian/build/build_amd64_none_amd64/.config"
 if not makefile.is_file() or not rules.is_file():
     raise SystemExit("Debian source tree lacks Makefile or debian/rules.gen")
 if not overlay.is_file():
     raise SystemExit("Missing committed D630 config overlay: " + str(overlay))
+if not baseline_config.is_file():
+    raise SystemExit("Debian-generated baseline config missing: " + str(baseline_config))
 
 make_before = makefile.read_text()
 rules_before = rules.read_text()
 (audit / "kernel-Makefile-before.txt").write_text(make_before)
 (audit / "rules.gen-before.txt").write_text(rules_before)
+
+# The D630 uses Intel ICH8 HD Audio with a Sigmatel/IDT codec.
+# Keep the ALSA core and this one driver/codec; explicitly turn off every
+# other sound Kconfig option present in Debian's generated baseline.
+sound_keep = {
+    "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_HDA_INTEL",
+    "SND_HDA_CODEC", "SND_HDA_CODEC_IDT", "SND_HDA_CORE", "SND_HDA_COMPONENT",
+    "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
+    "SND_JACK", "SND_CTL_LED",
+}
+config_symbols = set()
+for raw in baseline_config.read_text(errors="replace").splitlines():
+    match = re.match(r"^(?:CONFIG_([A-Z0-9_]+)=|# CONFIG_([A-Z0-9_]+) is not set$)", raw)
+    if match:
+        config_symbols.add(match.group(1) or match.group(2))
+sound_disabled = sorted(
+    symbol for symbol in config_symbols
+    if symbol.startswith("SND_") and symbol not in sound_keep
+)
+sound_policy = (
+    "\n# D630 audio: Intel ICH8 HD Audio plus the Sigmatel/IDT codec only.\n"
+    "# All other Debian sound drivers/codecs are explicitly disabled by the build policy.\n"
+    "CONFIG_SND=m\nCONFIG_SND_HDA_INTEL=m\nCONFIG_SND_HDA_CODEC_IDT=m\n"
+    + "".join("# CONFIG_" + symbol + " is not set\n" for symbol in sound_disabled)
+)
 target_config.parent.mkdir(parents=True, exist_ok=True)
-target_config.write_text(overlay.read_text())
+target_config.write_text(overlay.read_text().rstrip() + sound_policy)
+(audit / "sound-policy-disabled-symbols.txt").write_text(
+    "Allowed D630 sound stack: ALSA core, Intel HDA, IDT/Sigmatel codec and required dependencies.\n"
+    + "".join("CONFIG_" + symbol + "=n\n" for symbol in sound_disabled)
+)
 
 make_after = make_before
 for key, value in (("VERSION", "6"), ("PATCHLEVEL", "1"), ("SUBLEVEL", "187"), ("EXTRAVERSION", "")):
@@ -41,7 +73,6 @@ lines = rules_before.splitlines(keepends=True)
 target_indices = [i for i, line in enumerate(lines) if line.startswith("binary-arch_amd64_none_amd64_real_image:")]
 if len(target_indices) != 1:
     raise SystemExit("Expected exactly one binary-arch_amd64_none_amd64_real_image target; got " + str(len(target_indices)))
-
 index = target_indices[0]
 recipe_index = None
 for i in range(index + 1, min(index + 8, len(lines))):
@@ -52,7 +83,6 @@ for i in range(index + 1, min(index + 8, len(lines))):
         break
 if recipe_index is None:
     raise SystemExit("Could not locate Debian image build recipe immediately below the target")
-
 recipe = lines[recipe_index]
 kconfig_match = re.search(r"KCONFIG='([^']*)'", recipe)
 if not kconfig_match:
@@ -61,7 +91,6 @@ kconfig_parts = kconfig_match.group(1).split()
 if "debian/config/d630-core2.config" not in kconfig_parts:
     kconfig_parts.append("debian/config/d630-core2.config")
 recipe = recipe[:kconfig_match.start(1)] + " ".join(kconfig_parts) + recipe[kconfig_match.end(1):]
-
 for pattern, replacement in (
     (r"\bABINAME='[^']*'", "ABINAME='6.1.187'"),
     (r"\bLOCALVERSION='[^']*'", "LOCALVERSION='-d630-core2'"),
@@ -89,6 +118,7 @@ rules.write_text(rules_after)
     "Debian ABI name passed to image target: 6.1.187\n"
     "Debian LOCALVERSION and LOCALVERSION_IMAGE: -d630-core2\n"
     "The image target KCONFIG chain includes debian/config/d630-core2.config last\n"
+    "Sound policy: Intel HDA + IDT/Sigmatel codec only; unrelated sound drivers disabled\n"
     "The generated config diff is checked by audit-d630-config.py\n"
 )
-print("Applied D630 policy to Debian's native amd64 image target.")
+print("Applied D630 policy, including the single-device sound policy.")
