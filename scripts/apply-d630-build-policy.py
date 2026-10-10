@@ -48,17 +48,56 @@ sound_disabled = sorted(
     symbol for symbol in config_symbols
     if symbol.startswith("SND_") and symbol not in sound_keep
 )
+# Keep only the filesystems requested for this laptop and essential kernel pseudo-filesystems.
+filesystem_keep = {
+    "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "FAT_FS", "MSDOS_FS", "VFAT_FS",
+    "UDF_FS", "ISO9660_FS", "PROC_FS", "DEVPTS_FS",
+}
+filesystem_disabled = sorted(
+    symbol for symbol in config_symbols
+    if (symbol.endswith("_FS") and symbol not in filesystem_keep)
+    or symbol in {"SQUASHFS", "CRAMFS", "ROMFS"}
+)
+# Disable unrelated discrete/vendor GPU drivers. Keep Intel i915 and shared DRM helpers.
+gpu_prefixes = (
+    "DRM_AMDGPU", "DRM_RADEON", "DRM_NOUVEAU", "DRM_NVIDIA",
+    "DRM_VMWGFX", "DRM_VIRTIO_GPU", "DRM_QXL", "DRM_GMA500",
+    "DRM_AST", "DRM_BOCHS", "DRM_CIRRUS_QEMU", "DRM_MGAG200",
+    "DRM_TEGRA", "DRM_ROCKCHIP", "DRM_MESON", "DRM_EXYNOS",
+    "DRM_OMAP", "DRM_ETNAVIV", "DRM_LIMA", "DRM_PANFROST",
+    "DRM_PANTHOR", "DRM_V3D", "DRM_VC4", "DRM_IMX",
+    "DRM_PL111", "DRM_SUN4I", "DRM_FSL_DCU", "DRM_ARMADA",
+    "DRM_MEDIATEK", "DRM_SPRD", "DRM_STI", "DRM_RCAR_DU",
+    "DRM_XEN", "DRM_POWERVR", "DRM_LOONGSON", "DRM_SSD130X",
+)
+gpu_disabled = sorted(
+    symbol for symbol in config_symbols
+    if any(symbol.startswith(prefix) for prefix in gpu_prefixes)
+)
 sound_policy = (
     "\n# D630 audio: Intel ICH8 HD Audio plus the Sigmatel/IDT codec only.\n"
     "# All other Debian sound drivers/codecs are explicitly disabled by the build policy.\n"
     "CONFIG_SND=m\nCONFIG_SND_HDA_INTEL=m\nCONFIG_SND_HDA_CODEC_IDT=m\n"
     + "".join("# CONFIG_" + symbol + " is not set\n" for symbol in sound_disabled)
+    + "\n# D630 filesystems: only requested disk filesystems; pseudo-filesystems remain independently configured.\n"
+    + "".join("# CONFIG_" + symbol + " is not set\n" for symbol in filesystem_disabled)
+    + "\n# D630 graphics: Intel i915 only; disable unrelated GPU drivers.\n"
+    + "".join("# CONFIG_" + symbol + " is not set\n" for symbol in gpu_disabled)
 )
 target_config.parent.mkdir(parents=True, exist_ok=True)
 target_config.write_text(overlay.read_text().rstrip() + sound_policy)
 (audit / "sound-policy-disabled-symbols.txt").write_text(
     "Allowed D630 sound stack: ALSA core, Intel HDA, IDT/Sigmatel codec and required dependencies.\n"
     + "".join("CONFIG_" + symbol + "=n\n" for symbol in sound_disabled)
+)
+(audit / "filesystem-policy-disabled-symbols.txt").write_text(
+    "Allowed disk filesystems: ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, UDF and ISO9660.\n"
+    + "Essential proc and devpts pseudo-filesystems are retained; tmpfs/sysfs/devtmpfs are unaffected.\n"
+    + "".join("CONFIG_" + symbol + "=n\n" for symbol in filesystem_disabled)
+)
+(audit / "gpu-policy-disabled-symbols.txt").write_text(
+    "Intel i915 retained. Unrelated GPU driver families disabled.\n"
+    + "".join("CONFIG_" + symbol + "=n\n" for symbol in gpu_disabled)
 )
 
 make_after = make_before
@@ -119,6 +158,8 @@ rules.write_text(rules_after)
     "Debian LOCALVERSION and LOCALVERSION_IMAGE: -d630-core2\n"
     "The image target KCONFIG chain includes debian/config/d630-core2.config last\n"
     "Sound policy: Intel HDA + IDT/Sigmatel codec only; unrelated sound drivers disabled\n"
+    "Filesystem policy: only requested disk filesystems; unrelated filesystem drivers disabled\n"
+    "GPU policy: Intel i915 retained; unrelated AMD/NVIDIA and other vendor drivers disabled\n"
     "The generated config diff is checked by audit-d630-config.py\n"
 )
 print("Applied D630 policy, including the single-device sound policy.")
