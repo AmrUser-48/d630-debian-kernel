@@ -1,0 +1,64 @@
+name: Build D630 Debian 6.18 backports kernel
+
+on:
+  push:
+    branches: [kernel-6.18-trixie-backports]
+    paths:
+      - "config/**"
+      - "scripts/build-d630-kernel-6.18.sh"
+      - "scripts/prepare-debian-inputs-6.18.sh"
+      - ".github/workflows/build-d630-kernel-6.18.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d630-kernel-6.18-backports
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Debian Trixie backports amd64 image, audited
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Reclaim runner disk space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost /usr/share/swift /usr/lib/mono \
+            /opt/hostedtoolcache/CodeQL
+          df -h
+          docker system df
+
+      - name: Build Debian 6.18 backports kernel with native packaging rules
+        shell: bash
+        env:
+          SOURCE_VERSION: "6.18.15-1~bpo13+1"
+          BUILD_JOBS: "2"
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --volume "$PWD:/work" \
+            --workdir /work \
+            --env SOURCE_VERSION \
+            --env BUILD_JOBS \
+            debian:trixie \
+            bash -e -o pipefail -c 'bash scripts/build-d630-kernel-6.18.sh 2>&1 | tee build-6.18.log'
+
+      - name: Upload kernel package and audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d630-debian-kernel-6.18.15-d630-core2
+          path: |
+            dist/
+            audit/
+            build-6.18.log
+          if-no-files-found: warn
+          retention-days: 90
