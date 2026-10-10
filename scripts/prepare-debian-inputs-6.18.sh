@@ -1,10 +1,8 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# Fetch and validate Debian 12 kernel build inputs only. Never compile a kernel here.
+# Fetch and validate Debian 13 Trixie backports source and microcode inputs only.
 SOURCE_VERSION="${SOURCE_VERSION:-6.18.15-1~bpo13+1}"
-CONFIG_PACKAGE="${CONFIG_PACKAGE:-linux-config-6.18}"
-CONFIG_VERSION="${CONFIG_VERSION:-6.18.15-1~bpo13+1}"
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/prepared-inputs"
@@ -40,10 +38,9 @@ apt-get update
 
 {
   echo "Target Debian source package: linux=$SOURCE_VERSION"
-    echo "Target config package: $CONFIG_PACKAGE=$CONFIG_VERSION"
-  echo
+    echo
   echo "=== APT package candidates ==="
-  apt-cache policy linux "$CONFIG_PACKAGE" intel-microcode
+  apt-cache policy linux intel-microcode
 } > "$OUT/metadata/apt-policy.txt"
 
 # Download authentic source-package files from the signed Debian repository metadata.
@@ -82,40 +79,20 @@ test "$(dpkg-parsechangelog -l "$SOURCE_TREE/debian/changelog" -S Version)" = "$
   find "$SOURCE_TREE/debian/config/amd64" -maxdepth 3 -type f -printf '%P\n' 2>/dev/null | sort || true
 } > "$OUT/metadata/debian-packaging-layout.txt"
 
-# Download the matching official signed kernel image and Debian config package.
+# Download microcode separately; Debian's native setup target generates the baseline config.
 (
   cd "$WORK"
-  apt-get download "$CONFIG_PACKAGE=$CONFIG_VERSION" intel-microcode
+  apt-get download intel-microcode
 )
-CONFIG_DEB="$(find "$WORK" -maxdepth 1 -type f -name "${CONFIG_PACKAGE}_${CONFIG_VERSION}_*.deb" -print -quit)"
 MICROCODE_DEB="$(find "$WORK" -maxdepth 1 -type f -name "intel-microcode_*_amd64.deb" -print -quit)"
-test -n "$CONFIG_DEB" && test -s "$CONFIG_DEB"
 test -n "$MICROCODE_DEB" && test -s "$MICROCODE_DEB"
-
-check_field() {
-  local deb="$1" field="$2" expected="$3" actual
-  actual="$(dpkg-deb -f "$deb" "$field")"
-  test "$actual" = "$expected" || {
-    echo "$deb: expected $field '$expected', got '$actual'" >&2
-    exit 1
-  }
-}
-check_field "$CONFIG_DEB" Package "$CONFIG_PACKAGE"
-check_field "$CONFIG_DEB" Version "$CONFIG_VERSION"
-CONFIG_ARCH="$(dpkg-deb -f "$CONFIG_DEB" Architecture)"
-case "$CONFIG_ARCH" in
-  all|amd64) ;;
-  *) echo "Unexpected $CONFIG_PACKAGE architecture: $CONFIG_ARCH" >&2; exit 1 ;;
-esac
 check_field "$MICROCODE_DEB" Package intel-microcode
 check_field "$MICROCODE_DEB" Architecture amd64
 MICROCODE_VERSION="$(dpkg-deb -f "$MICROCODE_DEB" Version)"
 
-cp "$CONFIG_DEB" "$OUT/reference/"
 cp "$MICROCODE_DEB" "$OUT/reference/"
 
-mkdir -p "$WORK/config-root" "$WORK/microcode-root"
-dpkg-deb -x "$CONFIG_DEB" "$WORK/config-root"
+mkdir -p "$WORK/microcode-root"
 dpkg-deb -x "$MICROCODE_DEB" "$WORK/microcode-root"
 
 # T7250 is CPUID signature 06fd; the matching Linux firmware filename is 06-0f-0d.
@@ -144,14 +121,6 @@ if test -s "$MICROCODE_DOCS/copyright"; then cp "$MICROCODE_DOCS/copyright" "$OU
   sha256sum "$OUT/microcode/intel-ucode/06-0f-0d"
 } > "$OUT/microcode/MICROCODE-METADATA.txt"
 
-DIST_CONFIG_XZ="$WORK/config-root/usr/src/linux-config-6.18/config.amd64_none_amd64.xz"
-if ! test -s "$DIST_CONFIG_XZ"; then
-  DIST_CONFIG_XZ="$(find "$WORK/config-root" -type f -name 'config.amd64_none_amd64.xz' -print -quit)"
-fi
-test -n "$DIST_CONFIG_XZ" && test -s "$DIST_CONFIG_XZ"
-xz -dc "$DIST_CONFIG_XZ" > "$OUT/config/debian-config-package-amd64_none_amd64"
-cp "$OUT/config/debian-config-package-amd64_none_amd64" "$OUT/config/debian-reference-config-amd64"
-test -s "$OUT/config/debian-config-package-amd64_none_amd64"
 
 # Copy a small set of the exact Debian packaging/config rule files for quick review.
 mkdir -p "$OUT/reference/debian-packaging"
@@ -167,36 +136,15 @@ if test -d "$SOURCE_TREE/debian/config/amd64/none"; then
 fi
 
 {
-  echo "=== Official Debian config package / reference config ==="
-  dpkg-deb -f "$CONFIG_DEB" Package Version Architecture Section Source
-  echo
   echo "=== Intel microcode package ==="
   dpkg-deb -f "$MICROCODE_DEB" Package Version Architecture Section Source
   echo "Embedded microcode target file: intel-ucode/06-0f-0d"
   cat "$OUT/microcode/MICROCODE-METADATA.txt"
-  echo
-  echo "=== Relevant settings in the exact reference image config ==="
-  for symbol in \
-    MODULES MODULE_UNLOAD MODULE_SIG MODVERSIONS MICROCODE FW_LOADER EXTRA_FIRMWARE EXTRA_FIRMWARE_DIR \
-    DRM DRM_I915 AGP_INTEL \
-    MOUSE_PS2 MOUSE_PS2_ALPS MOUSE_PS2_SYNAPTICS MOUSE_PS2_TRACKPOINT MOUSEDEV MOUSEDEV_PSAUX \
-    ISO9660_FS EXT4_FS BTRFS_FS NTFS3_FS FAT_FS MSDOS_FS VFAT_FS UDF_FS \
-    ZRAM ZSMALLOC NETFILTER NF_TABLES NETFILTER_NETLINK NF_CONNTRACK NF_NAT \
-    NFT_CT NFT_FIB_IPV4 NFT_FIB_IPV6 NFT_FIB_INET NFT_MASQ; do
-    if grep -q "^CONFIG_$symbol=" "$OUT/config/debian-image-config-amd64-reference"; then
-      grep "^CONFIG_$symbol=" "$OUT/config/debian-image-config-6.1.0-53-amd64"
-    elif grep -q "^# CONFIG_$symbol is not set$" "$OUT/config/debian-image-config-6.1.0-53-amd64"; then
-      echo "# CONFIG_$symbol is not set"
-    else
-      echo "CONFIG_$symbol=<not present in config>"
-    fi
-  done
 } > "$OUT/metadata/package-and-config-report.txt"
 
 {
   echo "Prepared at UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "Source package version: $SOURCE_VERSION"
-    echo "Config package: $CONFIG_PACKAGE=$CONFIG_VERSION"
   echo "Intel microcode package: intel-microcode=$MICROCODE_VERSION"
   echo "Intel Core 2 T7250 microcode CPUID 0x06fd: PASS"
   echo "Source package extracted and checked by dpkg-source: PASS"
