@@ -7,6 +7,8 @@ on:
       - "config/**"
       - "scripts/build-d630-kernel-6.18.sh"
       - "scripts/prepare-debian-inputs-6.18.sh"
+      - "scripts/apply-d630-build-policy.py"
+      - "scripts/audit-d630-config.py"
       - ".github/workflows/build-d630-kernel-6.18.yml"
   workflow_dispatch:
 
@@ -15,7 +17,7 @@ permissions:
 
 concurrency:
   group: d630-kernel-6.18-backports
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
