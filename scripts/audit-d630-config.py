@@ -103,6 +103,9 @@ required = {
     "DVB_CORE": "n",
     "RADIO_ADAPTERS": "n",
     "MTD": "n",
+    "SND": "m",
+    "SND_HDA_INTEL": "m",
+    "SND_HDA_CODEC_IDT": "m",
 }
 for symbol, expected in required.items():
     actual = value(final, symbol)
@@ -167,7 +170,23 @@ DISABLED_CHILDREN = {
     "MEDIA_TEST_SUPPORT": ("VIDEO_VIM2M", "VIDEO_VICODEC", "VIDEO_VIMC", "VIDEO_VIVID", "VIDEO_V4L2_TPG", "DVB_VIDTV"),
 }
 
+SOUND_KEEP = {
+    "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_HDA_INTEL",
+    "SND_HDA_CODEC", "SND_HDA_CODEC_IDT", "SND_HDA_CORE", "SND_HDA_COMPONENT",
+    "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
+    "SND_JACK", "SND_CTL_LED",
+}
+unexpected_sound = sorted(
+    symbol for symbol, setting in final.items()
+    if symbol.startswith("SND_") and setting in ("y", "m") and symbol not in SOUND_KEEP
+)
+if unexpected_sound:
+    errors.append("Unwanted sound drivers/codecs remain enabled: " + ", ".join("CONFIG_" + s for s in unexpected_sound))
+
 def disabled_by_parent(symbol):
+    # The build script explicitly disables non-allowlisted SND_* symbols.
+    if symbol.startswith("SND_") and symbol not in SOUND_KEEP:
+        return True
     for parent, prefixes in DISABLED_CHILDREN.items():
         if value(overlay, parent) != "n":
             continue
@@ -230,6 +249,7 @@ if errors:
 (audit_path / "config-audit-report.txt").write_text(
     "PASS: Core 2 CPU optimization and required D630 configuration values validated.\n"
     "PASS: debug information is disabled for the stripped runtime kernel.\n"
+    "PASS: only Intel HDA plus the IDT/Sigmatel codec and required ALSA core remain enabled.\n"
     "PASS: NVMe, digital-TV and radio support are disabled as requested.\n"
     "PASS: DRM, i915 and Intel AGP match the official Debian reference config.\n"
     "PASS: cgroups, namespaces, eBPF, seccomp, AppArmor and nftables retain Debian baseline values.\n"
