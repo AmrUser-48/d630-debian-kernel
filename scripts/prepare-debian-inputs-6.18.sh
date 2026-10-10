@@ -23,12 +23,14 @@ rm -f /etc/apt/sources.list
 mkdir -p /etc/apt/sources.list.d
 rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources
 cat > /etc/apt/sources.list.d/d630-trixie.list <<'SOURCES'
-deb http://deb.debian.org/debian bookworm main non-free-firmware
-deb http://deb.debian.org/debian bookworm-updates main non-free-firmware
-deb http://security.debian.org/debian-security bookworm-security main non-free-firmware
-deb-src http://deb.debian.org/debian bookworm main non-free-firmware
-deb-src http://deb.debian.org/debian bookworm-updates main non-free-firmware
-deb-src http://security.debian.org/debian-security bookworm-security main non-free-firmware
+deb http://deb.debian.org/debian trixie main non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main non-free-firmware
+deb http://deb.debian.org/debian trixie-backports main non-free-firmware
+deb-src http://deb.debian.org/debian trixie main non-free-firmware
+deb-src http://deb.debian.org/debian trixie-updates main non-free-firmware
+deb-src http://security.debian.org/debian-security trixie-security main non-free-firmware
+deb-src http://deb.debian.org/debian trixie-backports main non-free-firmware
 SOURCES
 
 apt-get update
