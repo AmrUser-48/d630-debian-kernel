@@ -44,8 +44,6 @@ printf 'Source package version: %s\n' "$ACTUAL_SOURCE_VERSION" | tee "$AUDIT/sou
 echo "=== Stage 4: stage the verified early-microcode input ==="
 mkdir -p /lib/firmware/intel-ucode
 install -m 0644 "$INPUTS/microcode/intel-ucode/06-0f-0d" /lib/firmware/intel-ucode/06-0f-0d
-cp "$INPUTS/config/debian-reference-config-amd64" "$AUDIT/official-reference-config"
-cp "$INPUTS/config/debian-config-package-amd64_none_amd64" "$AUDIT/debian-config-package-amd64"
 cp "$ROOT/config/d630-core2.config" "$AUDIT/d630-core2.config"
 
 if ! id builder >/dev/null 2>&1; then
@@ -62,7 +60,9 @@ if ! test -s "$BUILD/.config"; then
   exit 1
 fi
 cp "$BUILD/.config" "$AUDIT/debian-baseline.config"
-chown builder:builder "$AUDIT/debian-baseline.config"
+cp "$BUILD/.config" "$AUDIT/official-reference-config"
+cp "$BUILD/.config" "$AUDIT/debian-config-package-amd64"
+chown builder:builder "$AUDIT/debian-baseline.config" "$AUDIT/official-reference-config" "$AUDIT/debian-config-package-amd64"
 
 echo "=== Stage 6: apply the narrowly scoped Debian build policy ==="
 runuser -u builder -- python3 "$ROOT/scripts/apply-d630-build-policy.py" \
