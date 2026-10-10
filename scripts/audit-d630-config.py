@@ -118,6 +118,37 @@ for symbol in ("DRM", "DRM_I915", "AGP_INTEL"):
     if actual != expected:
         errors.append("CONFIG_" + symbol + " changed from official Debian value " + expected + " to " + actual)
 
+# Fail if unrelated optional disk filesystems or non-Intel GPU drivers survive.
+FILESYSTEM_KEEP = {
+    "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "FAT_FS", "MSDOS_FS", "VFAT_FS",
+    "UDF_FS", "ISO9660_FS", "PROC_FS", "DEVPTS_FS",
+}
+unexpected_filesystems = sorted(
+    symbol for symbol, setting in final.items()
+    if ((symbol.endswith("_FS") and symbol not in FILESYSTEM_KEEP) or symbol in {"SQUASHFS", "CRAMFS", "ROMFS"})
+    and setting in ("y", "m")
+)
+if unexpected_filesystems:
+    errors.append("Unwanted filesystem drivers remain enabled: " + ", ".join("CONFIG_" + s for s in unexpected_filesystems))
+
+UNWANTED_GPU_PREFIXES = (
+    "DRM_AMDGPU", "DRM_RADEON", "DRM_NOUVEAU", "DRM_NVIDIA",
+    "DRM_VMWGFX", "DRM_VIRTIO_GPU", "DRM_QXL", "DRM_GMA500",
+    "DRM_AST", "DRM_BOCHS", "DRM_CIRRUS_QEMU", "DRM_MGAG200",
+    "DRM_TEGRA", "DRM_ROCKCHIP", "DRM_MESON", "DRM_EXYNOS",
+    "DRM_OMAP", "DRM_ETNAVIV", "DRM_LIMA", "DRM_PANFROST",
+    "DRM_PANTHOR", "DRM_V3D", "DRM_VC4", "DRM_IMX",
+    "DRM_PL111", "DRM_SUN4I", "DRM_FSL_DCU", "DRM_ARMADA",
+    "DRM_MEDIATEK", "DRM_SPRD", "DRM_STI", "DRM_RCAR_DU",
+    "DRM_XEN", "DRM_POWERVR", "DRM_LOONGSON", "DRM_SSD130X",
+)
+unexpected_gpu = sorted(
+    symbol for symbol, setting in final.items()
+    if any(symbol.startswith(prefix) for prefix in UNWANTED_GPU_PREFIXES) and setting in ("y", "m")
+)
+if unexpected_gpu:
+    errors.append("Unwanted GPU drivers remain enabled: " + ", ".join("CONFIG_" + s for s in unexpected_gpu))
+
 for symbol in ("CGROUPS", "NAMESPACES", "BPF_SYSCALL", "SECCOMP", "SECURITY_APPARMOR", "NETFILTER", "NF_TABLES"):
     expected = value(baseline, symbol)
     actual = value(final, symbol)
@@ -187,6 +218,10 @@ def disabled_by_parent(symbol):
     # The build script explicitly disables non-allowlisted SND_* symbols.
     if symbol.startswith("SND_") and symbol not in SOUND_KEEP:
         return True
+    if ((symbol.endswith("_FS") and symbol not in FILESYSTEM_KEEP) or symbol in {"SQUASHFS", "CRAMFS", "ROMFS"}):
+        return True
+    if any(symbol.startswith(prefix) for prefix in UNWANTED_GPU_PREFIXES):
+        return True
     for parent, prefixes in DISABLED_CHILDREN.items():
         if value(overlay, parent) != "n":
             continue
@@ -250,6 +285,8 @@ if errors:
     "PASS: Core 2 CPU optimization and required D630 configuration values validated.\n"
     "PASS: debug information is disabled for the stripped runtime kernel.\n"
     "PASS: only Intel HDA plus the IDT/Sigmatel codec and required ALSA core remain enabled.\n"
+    "PASS: unrelated optional filesystem drivers are disabled; proc/devpts remain.\n"
+    "PASS: Intel i915 is retained and unrelated GPU drivers are disabled.\n"
     "PASS: NVMe, digital-TV and radio support are disabled as requested.\n"
     "PASS: DRM, i915 and Intel AGP match the official Debian reference config.\n"
     "PASS: cgroups, namespaces, eBPF, seccomp, AppArmor and nftables retain Debian baseline values.\n"
