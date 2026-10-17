@@ -44,6 +44,26 @@ required = {
     "DEBUG_INFO_BTF": "n",
     "DEBUG_INFO_BTF_MODULES": "n",
     "GDB_SCRIPTS": "n",
+    "SCSI_LOWLEVEL": "n",
+    "SCSI_LOWLEVEL_PCMCIA": "n",
+    "ENCLOSURE_SERVICES": "n",
+    "SCSI_ENCLOSURE": "n",
+    "SCSI_DH": "n",
+    "SCSI_SPI_ATTRS": "n",
+    "SCSI_FC_ATTRS": "n",
+    "SCSI_ISCSI_ATTRS": "n",
+    "SCSI_SAS_ATTRS": "n",
+    "SCSI_SAS_LIBSAS": "n",
+    "SCSI_SRP_ATTRS": "n",
+    "RAID_ATTRS": "n",
+    "CHR_DEV_ST": "n",
+    "CHR_DEV_SCH": "n",
+    "CHR_DEV_SG": "n",
+    "SCSI_DEBUG": "n",
+    "SCSI_UFSHCD": "n",
+    "SCSI_UFSHCD_PCI": "n",
+    "SCSI_UFSHCD_PLATFORM": "n",
+    "SCSI_UFS_DWC_TC_PCI": "n",
     "NVME_CORE": "n",
     "NVME_FABRICS": "n",
     "NVME_TARGET": "n",
@@ -111,6 +131,17 @@ for symbol, expected in required.items():
     actual = value(final, symbol)
     if actual != expected:
         errors.append("CONFIG_" + symbol + ": expected " + expected + ", got " + actual)
+
+# Pruning host adapters must not remove the generic SCSI mid-layer, disk driver,
+# optical-drive driver, or USB mass storage used by normal laptop peripherals.
+for symbol in ("SCSI", "SCSI_MOD", "SCSI_COMMON", "BLK_DEV_SD", "BLK_DEV_SR", "USB_STORAGE"):
+    baseline_value = value(baseline, symbol)
+    actual = value(final, symbol)
+    if baseline_value in ("y", "m") and actual != baseline_value:
+        errors.append(
+            "Required storage infrastructure CONFIG_" + symbol
+            + " changed from Debian baseline " + baseline_value + " to " + actual
+        )
 
 for symbol in ("DRM", "DRM_I915", "AGP_INTEL"):
     expected = value(official, symbol)
@@ -191,6 +222,17 @@ DISABLED_CHILDREN = {
         "JFFS2_FS", "UBIFS_FS", "BCH", "PTP_1588_CLOCK_OCP",
     ),
     "BLK_DEV_NVME": ("NVME", "BLK_DEV_NVME"),
+    # Linux 6.1 drivers/scsi/Kconfig places host-adapter modules below
+    # "if SCSI_LOWLEVEL && SCSI"; include sourced adapter Kconfigs too.
+    "SCSI_LOWLEVEL": (
+        "SCSI_", "ISCSI_", "SGIWD93_SCSI", "BLK_DEV_3W_",
+        "VMWARE_PVSCSI", "XEN_SCSI_FRONTEND", "HYPERV_STORAGE",
+        "LIBFC", "LIBFCOE", "FCOE", "ZFCP", "53C700_",
+        "A3000_SCSI", "A2091_SCSI", "GVP11_SCSI", "ATARI_SCSI",
+        "MAC_SCSI", "MVME147_SCSI", "MVME16", "BVME6000_SCSI",
+        "SUN3_SCSI", "SUN3X_ESP", "JAZZ_ESP", "QEDI", "BE2ISCSI",
+        "MEGARAID_", "LIBCXGBI", "CXGB",
+    ),
     "MEDIA_DIGITAL_TV_SUPPORT": (
         "DVB", "MEDIA_TUNER_", "CYPRESS_FIRMWARE", "MANTIS_CORE", "MEDIA_ALTERA_CI",
         "SMS_SDIO_DRV", "SMS_SIANO_MDTV", "SMS_USB_DRV", "TTPCI_EEPROM",
@@ -219,6 +261,23 @@ unexpected_sound = sorted(
 )
 if unexpected_sound:
     errors.append("Unwanted sound drivers/codecs remain enabled: " + ", ".join("CONFIG_" + s for s in unexpected_sound))
+
+SCSI_CORE_KEEP = {
+    "SCSI_MOD", "SCSI_COMMON", "SCSI_DMA", "SCSI_NETLINK",
+    "SCSI_PROC_FS", "SCSI_CONSTANTS", "SCSI_LOGGING", "SCSI_SCAN_ASYNC",
+}
+SCSI_LOWLEVEL_PREFIXES = DISABLED_CHILDREN["SCSI_LOWLEVEL"]
+unexpected_scsi_lowlevel = sorted(
+    symbol for symbol, setting in final.items()
+    if setting in ("y", "m")
+    and symbol not in SCSI_CORE_KEEP
+    and any(symbol.startswith(prefix) for prefix in SCSI_LOWLEVEL_PREFIXES)
+)
+if unexpected_scsi_lowlevel:
+    errors.append(
+        "Unused SCSI low-level/controller support remains enabled despite CONFIG_SCSI_LOWLEVEL=n: "
+        + ", ".join("CONFIG_" + symbol for symbol in unexpected_scsi_lowlevel)
+    )
 
 def disabled_by_parent(symbol):
     # The build script explicitly disables non-allowlisted SND_* symbols.
@@ -298,6 +357,7 @@ if errors:
     "PASS: unrelated optional filesystem drivers are disabled; proc/devpts remain.\n"
     "PASS: Intel i915 is retained and unrelated GPU drivers are disabled.\n"
     "PASS: NVMe, digital-TV and radio support are disabled as requested.\n"
+    "PASS: unused SCSI host adapters/transports are disabled and storage core is preserved.\n"
     "PASS: DRM, i915 and Intel AGP match the official Debian reference config.\n"
     "PASS: cgroups, namespaces, eBPF, seccomp, AppArmor and nftables retain Debian baseline values.\n"
     "PASS: no unexplained Debian module m -> n conversion.\n"

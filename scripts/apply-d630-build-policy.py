@@ -25,6 +25,27 @@ if not overlay.is_file():
 if not baseline_config.is_file():
     raise SystemExit("Debian-generated baseline config missing: " + str(baseline_config))
 
+# Fail closed if the committed overlay loses an intentional SCSI-pruning setting.
+required_scsi_exclusions = (
+    "SCSI_LOWLEVEL", "SCSI_LOWLEVEL_PCMCIA",
+    "ENCLOSURE_SERVICES", "SCSI_ENCLOSURE", "SCSI_DH",
+    "SCSI_SPI_ATTRS", "SCSI_FC_ATTRS", "SCSI_ISCSI_ATTRS",
+    "SCSI_SAS_ATTRS", "SCSI_SAS_LIBSAS", "SCSI_SRP_ATTRS", "RAID_ATTRS",
+    "CHR_DEV_ST", "CHR_DEV_SCH", "CHR_DEV_SG", "SCSI_DEBUG",
+    "SCSI_UFSHCD", "SCSI_UFSHCD_PCI", "SCSI_UFSHCD_PLATFORM",
+    "SCSI_UFS_DWC_TC_PCI",
+)
+overlay_text = overlay.read_text()
+missing_scsi_exclusions = sorted(
+    symbol for symbol in required_scsi_exclusions
+    if not re.search(r"(?m)^# CONFIG_" + re.escape(symbol) + r" is not set$", overlay_text)
+)
+if missing_scsi_exclusions:
+    raise SystemExit(
+        "Incomplete D630 SCSI-pruning policy; missing explicit exclusions: "
+        + ", ".join("CONFIG_" + symbol for symbol in missing_scsi_exclusions)
+    )
+
 make_before = makefile.read_text()
 rules_before = rules.read_text()
 (audit / "kernel-Makefile-before.txt").write_text(make_before)
@@ -173,6 +194,7 @@ rules.write_text(rules_after)
     "Sound policy: Intel HDA + IDT/Sigmatel codec only; unrelated sound drivers disabled\n"
     "Filesystem policy: only requested disk filesystems; unrelated filesystem drivers disabled\n"
     "GPU policy: Intel i915 retained; unrelated AMD/NVIDIA and other vendor drivers disabled\n"
+    "SCSI policy: unused host adapters/transports disabled; SCSI disk, CD/DVD and USB storage retained\n"
     "The generated config diff is checked by audit-d630-config.py\n"
 )
 print("Applied D630 policy, including the single-device sound policy.")

@@ -28,7 +28,7 @@ The official image config is a comparison baseline for the hardware stack. The D
 
 ## Explicit exclusions
 
-The overlay disables CAN, ISDN, InfiniBand/RDMA, FireWire, NFC, WiMAX, IEEE 802.15.4/6LoWPAN, USB gadget mode, NVMe, DVB/radio-adapter drivers and MTD. It must not blanket-disable driver modules and must not change the DRM/i915/AGP configuration.
+The overlay disables CAN, ISDN, InfiniBand/RDMA, FireWire, NFC, WiMAX, IEEE 802.15.4/6LoWPAN, USB gadget mode, NVMe, DVB/radio-adapter drivers, MTD, and unused SCSI host adapters. Linux 6.1.187's `SCSI_LOWLEVEL` parent gates the host-adapter menu, while SCSI core, `sd_mod`, CD/DVD support, libata/AHCI, and USB mass storage remain enabled. Optional enclosure services, multipath handlers, transport attributes, tape/changer/generic pass-through support, PCMCIA SCSI adapters, and UFS controllers are disabled. The audit verifies that no host-adapter family remains active and protects generic storage support against accidental removal. The overlay must not blanket-disable driver modules and must not change the DRM/i915/AGP configuration. See the [Linux SCSI Kconfig](https://github.com/gregkh/linux/blob/v6.1.187/drivers/scsi/Kconfig) and [SCSI subsystem documentation](https://github.com/gregkh/linux/blob/v6.1.187/Documentation/scsi/scsi.rst).
 
 ## Build and validation
 
