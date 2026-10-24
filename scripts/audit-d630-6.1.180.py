@@ -59,7 +59,7 @@ required = {
     "NLS": "y", "NLS_UTF8": "y", "NLS_CODEPAGE_437": "y",
     "WLAN": "y", "CFG80211": "m", "MAC80211": "m", "RFKILL": "y",
     "IWLEGACY": "m", "IWL3945": "m",
-    "SOUND": "y", "SND": "y", "SND_HDA": "y",
+    "SOUND": "y", "SND": "y", "SND_PCI": "y", "SND_HDA": "y",
     "SND_HDA_INTEL": "m", "SND_HDA_CODEC_SIGMATEL": "m",
     "DVB_CORE": "n", "MEDIA_DIGITAL_TV_SUPPORT": "n",
     "MEDIA_RADIO_SUPPORT": "n", "MEDIA_SDR_SUPPORT": "n", "MEDIA_TEST_SUPPORT": "n",
