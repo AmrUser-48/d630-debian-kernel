@@ -56,6 +56,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Initialize per-variant diagnostic log
+        run: |
+          set -Eeuo pipefail
+          {
+            echo "Workflow: $GITHUB_WORKFLOW"
+            echo "Run ID: $GITHUB_RUN_ID / attempt $GITHUB_RUN_ATTEMPT"
+            echo "Commit: $GITHUB_SHA"
+            echo "Branch: $GITHUB_REF_NAME"
+            echo "Variant: $BUILD_VARIANT"
+            echo "Source package: linux=$SOURCE_VERSION"
+            echo "Started at UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          } > "build-$BUILD_VARIANT.log"
+
       - name: Reclaim unused runner disk space
         run: |
           set -Eeuo pipefail
@@ -104,7 +117,7 @@ jobs:
             --env SOURCE_VERSION \
             --env BUILD_JOBS \
             debian:bookworm \
-            bash -e -o pipefail -c 'bash scripts/build-d630-6.1.180.sh 2>&1 | tee "build-${BUILD_VARIANT}.log"'
+            bash -e -o pipefail -c 'bash scripts/build-d630-6.1.180.sh 2>&1 | tee -a "build-${BUILD_VARIANT}.log"'
 
       - name: Verify package, configuration & checksums
         run: |
