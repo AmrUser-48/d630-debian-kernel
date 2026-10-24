@@ -64,4 +64,4 @@ def normalize_fragment(text: str) -> tuple[str, list[str]]:
         output.append(line)
 
     normalized = "\n".join(output).rstrip() + "\n"
-    return normalized, sorted(set(duplicates))
+    return normalized, sorted(duplicates)
