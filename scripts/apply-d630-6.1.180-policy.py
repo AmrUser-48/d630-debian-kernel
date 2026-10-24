@@ -194,7 +194,7 @@ def normalize_kconfig_fragment(text: str) -> tuple[str, list[str]]:
             continue
         values[symbol] = requested
         output.append(line)
-    return "\\n".join(output).rstrip() + "\\n", sorted(set(duplicates))
+    return "\n".join(output).rstrip() + "\n", sorted(set(duplicates))
 
 
 def values_in_fragment(text: str) -> dict[str, str]:
@@ -213,11 +213,11 @@ def values_in_fragment(text: str) -> dict[str, str]:
 generated, collapsed = normalize_kconfig_fragment(generated)
 target_config.write_text(generated, encoding="utf-8")
 (audit / "kconfig-fragment-normalization.txt").write_text(
-    f"Effective D630 fragment: {target_config}\\n"
-    f"Unique CONFIG symbols: {len(values_in_fragment(generated))}\\n"
-    f"Identical repeated assignments collapsed: {len(collapsed)}\\n"
-    + "".join(f"CONFIG_{symbol}\\n" for symbol in collapsed)
-    + "Conflicting repeated assignments: 0\\n",
+    f"Effective D630 fragment: {target_config}\n"
+    f"Unique CONFIG symbols: {len(values_in_fragment(generated))}\n"
+    f"Identical repeated assignments collapsed: {len(collapsed)}\n"
+    + "".join(f"CONFIG_{symbol}\n" for symbol in collapsed)
+    + "Conflicting repeated assignments: 0\n",
     encoding="utf-8",
 )
 
