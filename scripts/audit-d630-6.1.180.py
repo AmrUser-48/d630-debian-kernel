@@ -51,6 +51,8 @@ required = {
     "SQUASHFS": "y", "SQUASHFS_ZLIB": "y", "SQUASHFS_LZ4": "y",
     "SQUASHFS_LZO": "y", "SQUASHFS_XZ": "y", "SQUASHFS_ZSTD": "y",
     "ZSMALLOC": "y", "ZRAM": "y", "ZRAM_DEF_COMP_LZ4": "y",
+    "ZRAM_DEF_COMP_LZORLE": "n", "ZRAM_DEF_COMP_ZSTD": "n",
+    "ZRAM_DEF_COMP_LZO": "n", "ZRAM_DEF_COMP_LZ4HC": "n", "ZRAM_DEF_COMP_842": "n",
     "CRYPTO_LZO": "y", "CRYPTO_ZSTD": "y", "CRYPTO_LZ4": "y",
     "CRYPTO_LZ4HC": "y", "CRYPTO_842": "y",
     "LZO_COMPRESS": "y", "LZO_DECOMPRESS": "y",
