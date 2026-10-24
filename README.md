@@ -1,43 +1,62 @@
-# Dell Latitude D630 — Debian 12 kernel workbench
+# Dell Latitude D630 — Debian kernel build
 
-Target: Debian 12 (Bookworm), amd64, Dell Latitude D630 / Intel Core 2 Duo T7250 / Intel GM965 GMA X3100 / Intel PRO/Wireless 3945ABG, legacy BIOS.
+This repository produces installable Debian 12 kernel packages from Debian's **pinned Linux source package 6.1.180-1** for the Dell Latitude D630 / Intel Core 2 Duo T7250.
 
-## Source and package
+| Variant | Debian package | Kernel release |
+|---|---|---|
+| Standard | `linux-image-6.1.0-52-amd64` | `6.1.0-52-amd64` |
+| PREEMPT_RT | `linux-image-6.1.0-52-rt-amd64` | `6.1.0-52-rt-amd64` |
 
-The kernel is built from Debian's native linux source package version 6.1.187-1, using Debian's patches, amd64 configuration and packaging rules. It does not start from upstream x86_64_defconfig, and does not blanket-convert modules from m to n.
+The custom binary package version is `6.1.180-1+d6301`. Packages are custom and unsigned by Debian's kernel signing keys. Keep a known-good boot entry until the kernel has been tested on the physical machine.
 
-- Kernel release: 6.1.187-d630-core2
-- Runtime package: linux-image-6.1.187-d630-core2
-- Architecture: amd64
+## Run a build
 
-## Configuration policy
+Use the single **D630 Kernel — Build, Audit & Publish** workflow:
 
-The x86-64 processor-family choice is explicitly set to `CONFIG_MCORE2=y` for the Core 2 Duo T7250; `CONFIG_GENERIC_CPU` must be unset. The generated final config is checked for both values.
+[Open the kernel build workflow](.github/workflows/d630-kernel-build.yml)
 
-The workflow saves Debian's generated amd64 baseline, then applies a D630-specific overlay. An audit artifact contains the effective config diff and per-symbol classification. The job fails on unexplained loss of retained modules.
+On a manual run, select `amd64`, `amd64-rt`, or `both`. A push to a watched source/configuration/workflow path builds both variants.
 
-The sound policy retains the ALSA core, Intel ICH8 HD Audio (snd-hda-intel) and the IDT/Sigmatel codec used by the D630; all other optional sound-card drivers and codec families are disabled and audited. The filesystem policy retains ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, UDF and ISO9660 as disk filesystems, plus essential proc/devpts pseudo-filesystems; unrelated optional filesystem drivers are disabled and audited. The graphics policy retains Intel i915 and its shared DRM dependencies, while disabling unrelated AMD/AMDGPU, Radeon, NVIDIA Nouveau and other vendor GPU drivers. The overlay makes ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, UDF and zram built-in, preserving Debian's default LZO-RLE compressor for zram. ISO9660 remains modular. The PS/2 mouse/touchpad protocol driver (psmouse) remains modular and unloadable. Debian's built-in INPUT_MOUSEDEV and INPUT_MOUSEDEV_PSAUX settings are preserved for GPM's legacy /dev/input/mice interface. DRM, i915 and Intel AGP are held to the exact official Debian reference config values. nftables FIB expression support for IPv4, IPv6 and inet rules stays modular for firewalld. The SCSI policy disables `CONFIG_SCSI_LOWLEVEL` and the PCMCIA host-adapter menu, plus unused enclosure, multipath, transport-attribute, tape/changer, generic pass-through and UFS support; it retains the SCSI core, disk and CD/DVD drivers, libata/AHCI, and USB mass storage. This follows the Linux 6.1.187 Kconfig split between SCSI core/upper-level devices and low-level host adapters ([drivers/scsi/Kconfig](https://github.com/gregkh/linux/blob/v6.1.187/drivers/scsi/Kconfig), [SCSI documentation](https://github.com/gregkh/linux/blob/v6.1.187/Documentation/scsi/scsi.rst)).
+The Actions UI uses one naming scheme:
+- **Workflow:** `D630 Kernel — Build, Audit & Publish`
+- **Run:** variant selection, branch, and run number
+- **Job:** `Build, validate & publish / <variant>`
+- **Steps:** named by operation, such as `Build Debian kernel package / amd64` and `Verify package, configuration & checksums`
 
-A small, explicit set of hardware subsystems is disabled: CAN, ISDN, InfiniBand/RDMA, FireWire, NFC, WiMAX, IEEE 802.15.4/6LoWPAN, USB gadget mode, all NVMe host/fabric/target support, DVB core and digital-TV/radio/SDR/test-media APIs, legacy TV-tuner/capture peripheral drivers and unused legacy videobuf helpers, and MTD. DVB is not built: `CONFIG_DVB_CORE` and `CONFIG_MEDIA_DIGITAL_TV_SUPPORT` are disabled. The V4L2 core, USB webcam support and modern videobuf2 infrastructure remain available. Debug information is disabled through CONFIG_DEBUG_INFO_NONE=y; only the runtime image target is built.
+The workflow has separate deliverable and diagnostic artifacts. The **installable package artifact is uploaded only after verification succeeds**, and the pre-release is published only after that upload succeeds. Logs and audit files are uploaded on failures too, without being mislabelled as a successful kernel package.
 
-## Built-in Core 2 microcode
+## Build method
 
-The workflow downloads Debian Bookworm's intel-microcode package, validates the 06-0f-0d blob for T7250 CPUID signature 0x000006fd, stages it under /lib/firmware/intel-ucode/06-0f-0d and compiles it into the kernel for early loading. Intel's microcode license and copyright notice are included in the image package documentation and release sidecars. Updating the microcode requires rebuilding the kernel.
+The build follows Debian's native kernel packaging rules, not a generic upstream `defconfig` build:
 
-The Intel PRO/Wireless 3945ABG firmware remains separate from the kernel microcode. Install the appropriate Debian firmware-iwlwifi package if the machine needs that firmware.
+1. Reclaim unused disk space on the fresh GitHub-hosted runner and report disk use before/after cleanup.
+2. Run syntax checks and unit tests for the Kconfig normalization logic.
+3. Download the pinned Debian source archive and verify its checksums with `dpkg-source`.
+4. Generate Debian's native configuration for the selected featureset.
+5. Apply the D630 overlay once, normalize repeated Kconfig assignments, and reject contradictory assignments.
+6. Run `olddefconfig`, audit the effective config, and refuse to compile if Kconfig override/choice warnings occur.
+7. Build Debian's native `binary-arch_amd64_none_amd64_real_image` or `binary-arch_amd64_rt_amd64_real_image` target.
+8. Audit the post-build config, firmware blobs, package identity, required module payloads, and SHA-256 checksums.
+9. Upload the verified package and publish its assets to a uniquely tagged pre-release.
 
-## Workflows and artifacts
+The workflows use `actions/checkout@v7` and `actions/upload-artifact@v7`. They run the actual Debian build inside `debian:bookworm`; the host runner is used for orchestration, disk management, artifact upload, and release publication. Builds use two jobs in parallel inside the container to limit memory use.
 
-- Prepare Debian inputs: downloads the signed Debian source archives, official reference image/config packages, microcode, licenses and audit metadata. Source files and .deb inputs are retained as an Actions artifact, not committed into Git.
-- Build D630 kernel: builds the amd64 runtime image using Debian's native binary-arch_amd64_none_amd64_real_image target, verifies the exact release and final config, checks the built-in microcode bytes, and uploads the image .deb with the audit and checksums.
+## Configuration and script ownership
 
-The build workflow runs for relevant changes on main or can be started from GitHub Actions with workflow_dispatch. Download the generated package directly from the build run's Artifacts section. Debug and development packages are not built or published.
+- `config/d630-core2-6.1.180.config`: the committed D630 policy overlay on Debian's generated configuration.
+- `scripts/build-d630-6.1.180.sh`: orchestrates source/dependency preparation, native config generation, compilation, firmware checks, and package creation.
+- `scripts/apply-d630-6.1.180-policy.py`: applies hardware-specific pruning and appends the overlay to the selected Debian image target's `KCONFIG` chain. It does not rewrite Debian's kernel ABI or `LOCALVERSION`.
+- `scripts/d630_kconfig.py`: shared config parser and fragment normalizer. Identical repeated assignments are collapsed; contradictory assignments fail closed.
+- `scripts/audit-d630-6.1.180.py`: checks mandatory settings and records the effective diff and symbol classification.
+- `scripts/test-d630-kconfig.py`: fast unit tests for config parsing and normalization.
+- `scripts/verify-d630-6.1.180-build.sh`: final package/config/firmware/checksum gate before a deliverable artifact or release can be created.
 
-GitHub-hosted CI cannot test a boot on the physical D630. Treat a successful build as package/config validation, not proof of hardware boot. Test storage, PS/2 touchpad, Intel graphics, wireless firmware and firewalld/nftables FIB rules after installing on the target machine.
+The build preserves Debian's generated settings for Intel i915/AGP, storage, USB mass storage and nftables, while applying an explicit D630 policy. Important required settings include `CONFIG_MCORE2=y`, built-in ALSA/HDA/ALSA PCI core, modular Intel HDA and Sigmatel codec, modular Intel 3945ABG Wi-Fi, built-in zram with LZ4 as the default, and the requested local filesystems. Unsupported symbols or unmet Kconfig dependencies cause the audit to fail.
 
-## Provenance
+## Artifacts and diagnosis
 
-- Debian linux source package: https://packages.debian.org/bookworm/source/linux
-- Official reference image: https://packages.debian.org/bookworm/linux-image-6.1.0-53-amd64
-- Official config package: https://packages.debian.org/bookworm/linux-config-6.1
-- Intel microcode package: https://packages.debian.org/bookworm/intel-microcode
+A successful run produces an artifact named like `d630-kernel-amd64-<run-id>-<attempt>` or `d630-kernel-amd64-rt-<run-id>-<attempt>`, containing the installable Debian image, firmware packages, configuration audit, release notes and checksums. Matching uniquely tagged GitHub pre-releases contain the same deliverables.
+
+On failure, open the artifact named `d630-kernel-diagnostics-<variant>-<run-id>-<attempt>`. Start with `build-<variant>.log`, then inspect `audit/<variant>/kconfig-merge.log`, `kconfig-olddefconfig.log`, `native-image-build.log`, `d630-config-symbol-audit.tsv`, and `unclassified-module-drops.txt` where present.
+
+Hosted CI can verify the source, effective config and package contents. It cannot prove that the kernel boots or that graphics, audio, Wi-Fi, touchpad and firewalld work on the physical D630; test those after installation.
