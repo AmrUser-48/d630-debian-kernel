@@ -15,7 +15,7 @@ Use the single **D630 Kernel — Build, Audit & Publish** workflow:
 
 [Open the kernel build workflow](.github/workflows/d630-kernel-build.yml)
 
-On a manual run, select `amd64`, `amd64-rt`, or `both`. A push to a watched source/configuration/workflow path builds both variants.
+On a manual run, select `amd64`, `amd64-rt`, or `both`. A push that changes the workflow, configuration, or build scripts builds both variants. Documentation-only changes do not start a six-hour kernel build.
 
 The Actions UI uses one naming scheme:
 - **Workflow:** `D630 Kernel — Build, Audit & Publish`
