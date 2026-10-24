@@ -112,6 +112,7 @@ grep -Fqx 'CONFIG_SND_HDA_CODEC_SIGMATEL=m' "$FINAL_CONFIG" || fail "Sigmatel co
 
 echo "=== Verify module payload and checksums ==="
 dpkg-deb -c "$PACKAGE" | grep -F "/lib/modules/$EXPECTED_RELEASE/" >/dev/null || fail "kernel modules for $EXPECTED_RELEASE are absent"
+grep -Fqx "PASS" "$DIST/CONFIG-AUDIT-ERRORS.txt" || fail "release audit error report is not PASS"
 (cd "$DIST" && sha256sum --check SHA256SUMS)
 
 echo "PASS: package metadata, firmware, effective config, kernel modules, and checksums validated for $VARIANT."
