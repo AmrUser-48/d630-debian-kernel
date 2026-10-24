@@ -76,7 +76,11 @@ echo "=== Stage 7: preflight the merged config and exact kernel release ==="
   runuser -u builder -- "$SOURCE/scripts/kconfig/merge_config.sh" -m -O "$BUILD" \
     "$AUDIT/debian-baseline.config" "$SOURCE/debian/config/d630-core2.config"
 ) > "$AUDIT/kconfig-merge.log" 2>&1
-runuser -u builder -- make -C "$SOURCE" O="$BUILD" ARCH=x86 olddefconfig
+runuser -u builder -- make -C "$SOURCE" O="$BUILD" ARCH=x86 olddefconfig 2>&1 | tee "$AUDIT/kconfig-olddefconfig.log"
+if grep -Ein 'warning: override:' "$AUDIT/kconfig-olddefconfig.log"; then
+  echo "FAIL: Kconfig emitted override warnings during olddefconfig; refusing to compile." >&2
+  exit 1
+fi
 PREVIEW_RELEASE="$(runuser -u builder -- make --no-print-directory -s -C "$SOURCE" \
   O="$BUILD" ARCH=x86 LOCALVERSION=-d630-core2 kernelrelease)"
 printf '%s\n' "$PREVIEW_RELEASE" | tee "$AUDIT/preflight-kernelrelease.txt"
@@ -94,7 +98,12 @@ runuser -u builder -- env \
   DEB_RULES_REQUIRES_ROOT=no \
   DEB_BUILD_OPTIONS="parallel=$BUILD_JOBS" \
   MAKEFLAGS="-j$BUILD_JOBS" \
-  make -C "$SOURCE" -f debian/rules.gen binary-arch_amd64_none_amd64_real_image
+  make -C "$SOURCE" -f debian/rules.gen binary-arch_amd64_none_amd64_real_image \
+  2>&1 | tee "$AUDIT/native-image-build.log"
+if grep -Ein 'warning: override:' "$AUDIT/native-image-build.log"; then
+  echo "FAIL: Kconfig emitted override warnings during the native build; refusing to package." >&2
+  exit 1
+fi
 
 echo "=== Stage 9: validate the built config and embedded microcode ==="
 test -s "$BUILD/.config"
