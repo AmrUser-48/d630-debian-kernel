@@ -1,0 +1,147 @@
+name: D630 Kernel — Build, Audit & Publish
+run-name: "D630 kernel / ${{ inputs.variant || 'both variants' }} / ${{ github.ref_name }} / #${{ github.run_number }}"
+
+on:
+  push:
+    branches:
+      - main
+      - d630-kernel-6.1.180-amd64-rt
+    paths:
+      - ".github/workflows/**"
+      - "config/d630-core2-6.1.180.config"
+      - "scripts/**"
+      - "docs/**"
+      - "README.md"
+      - ".gitignore"
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Kernel variant to build and publish
+        required: true
+        type: choice
+        options:
+          - both
+          - amd64
+          - amd64-rt
+        default: both
+
+permissions:
+  contents: write
+
+concurrency:
+  group: d630-kernel-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build_validate_publish:
+    name: Build, validate & publish / ${{ matrix.variant }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.variant == 'both' || inputs.variant == matrix.variant }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        variant:
+          - amd64
+          - amd64-rt
+    env:
+      BUILD_VARIANT: ${{ matrix.variant }}
+      SOURCE_VERSION: "6.1.180-1"
+      BUILD_JOBS: "2"
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v7
+
+      - name: Reclaim unused runner disk space
+        run: |
+          set -Eeuo pipefail
+          echo "=== Disk usage before cleanup ==="
+          df -h "$GITHUB_WORKSPACE"
+          docker system df
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/share/swift \
+            /usr/lib/mono \
+            /opt/hostedtoolcache/CodeQL
+          docker system prune --all --force --volumes
+          echo "=== Disk usage after cleanup ==="
+          df -h "$GITHUB_WORKSPACE"
+          docker system df
+
+      - name: Lint workflow and build scripts
+        run: |
+          set -Eeuo pipefail
+          bash -n scripts/build-d630-6.1.180.sh
+          bash -n scripts/verify-d630-6.1.180-build.sh
+          python3 -m py_compile \
+            scripts/d630_kconfig.py \
+            scripts/apply-d630-6.1.180-policy.py \
+            scripts/audit-d630-6.1.180.py \
+            scripts/test-d630-kconfig.py
+          python3 scripts/test-d630-kconfig.py
+          ruby -e 'require "yaml"; YAML.parse_file(ARGV.fetch(0)); puts "PASS: workflow YAML syntax"' \
+            .github/workflows/d630-kernel-build.yml
+
+      - name: Build Debian kernel package / ${{ matrix.variant }}
+        timeout-minutes: 330
+        run: |
+          set -Eeuo pipefail
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/work" \
+            --workdir /work \
+            --env BUILD_VARIANT \
+            --env SOURCE_VERSION \
+            --env BUILD_JOBS \
+            debian:bookworm \
+            bash -e -o pipefail -c 'bash scripts/build-d630-6.1.180.sh 2>&1 | tee "build-${BUILD_VARIANT}.log"'
+
+      - name: Verify package, configuration & checksums
+        run: |
+          set -Eeuo pipefail
+          bash scripts/verify-d630-6.1.180-build.sh "$BUILD_VARIANT"
+
+      - name: Upload diagnostics on success or failure
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: d630-kernel-diagnostics-${{ matrix.variant }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build-${{ matrix.variant }}.log
+            audit/${{ matrix.variant }}/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 0
+
+      - name: Upload validated installable packages
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: d630-kernel-${{ matrix.variant }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/${{ matrix.variant }}/*
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+      - name: Publish validated packages to GitHub pre-release
+        if: ${{ success() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          DIST="$GITHUB_WORKSPACE/dist/$BUILD_VARIANT"
+          TAG="d630-kernel-6.1.180-$BUILD_VARIANT-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          test -s "$DIST/RELEASE-NOTES.md"
+          gh release create "$TAG" "$DIST"/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "D630 Debian 12 kernel 6.1.180 ($BUILD_VARIANT)" \
+            --notes-file "$DIST/RELEASE-NOTES.md" \
+            --prerelease
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,name,assets
