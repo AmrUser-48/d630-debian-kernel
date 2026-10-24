@@ -172,7 +172,7 @@ runuser -u builder -- python3 "$ROOT/scripts/apply-d630-6.12.95-policy.py" \
 echo "=== Resolve Kconfig dependencies and validate the final .config ==="
 runuser -u builder -- make -C "$SOURCE" O="$BUILD" ARCH=x86 olddefconfig \
   2>&1 | tee "$AUDIT/olddefconfig.log"
-if grep -Eiq 'warning: override:|changes choice state|reassigning to symbol' "$AUDIT/olddefconfig.log"; then
+if grep -Eiq 'warning:|changes choice state|reassigning to symbol|trying to assign nonexistent symbol' "$AUDIT/olddefconfig.log"; then
   echo "Unexpected Kconfig override/choice warning; refuse to compile." >&2
   cat "$AUDIT/olddefconfig.log" >&2
   exit 1

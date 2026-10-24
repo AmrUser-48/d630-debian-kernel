@@ -6,6 +6,8 @@ Normal ABI: `6.12.95+deb12-amd64`.
 RT ABI: `6.12.95+deb12-rt-amd64`.
 Custom binary version: `6.12.95-1~bpo12+1+d6301`.
 
-The first 6.12.95 attempts stopped on setup-target naming and did **not** compile kernel images. The active workflow pair now uses Debian's documented native targets and edits Debian's generated configuration in place. It clears the zram default choice before selecting LZ4, resolves dependencies through `olddefconfig`, audits before and after the image build, and fails on critical configuration loss or unexplained module removals. CA bootstrap is also fixed by installing the Debian CA bundle from signed APT metadata before switching repository traffic to HTTPS.
+No kernel package has been produced yet. The last normal and RT attempts reached the pre-compile configuration audit and correctly refused to compile because the audit expected the nonexistent Linux 6.12 `MICROCODE_INTEL` symbol and incorrectly required the hidden `SND_HDA` tristate to be built in. The RT audit also exposed the upstream Linux 6.12 `DRM_I915 depends on !PREEMPT_RT` constraint.
 
-Do not use the retired 6.1.180/6.1.187 workflows for this request. No kernel package should be considered successful until a matching installable image .deb, its expected `/lib/modules` release path, firmware checks, the config audit and checksums all pass. Hosted CI cannot replace the physical D630 boot test.
+The current correction uses `CPU_SUP_INTEL=y` with `MICROCODE=y`, expects the modular HDA core at `m`, preserves i915 in the normal kernel, and explicitly audits the upstream i915 RT limitation. The runner edits Debian's native generated `.config` directly, normalizes choice groups before `olddefconfig`, rejects config warnings, audits critical symbols before compilation, and fails closed on unexplained module removals. The required firmware, compressors, filesystems, packages and checksums remain hard gates.
+
+Only the paired normal and RT Bookworm-backports workflows should be used. A successful CI build still needs a physical boot test on the Dell Latitude D630.

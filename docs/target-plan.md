@@ -20,7 +20,7 @@ The source is fetched from APT's signed Bookworm-backports metadata and checked 
 - Built-in ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, exFAT and UDF; modular ISO9660; built-in OverlayFS and SquashFS with zlib/LZ4/LZO/XZ/Zstd.
 - Built-in zram with LZ4 default and all 6.12 zram compression backends (LZO, Zstd, LZ4, LZ4HC, DEFLATE, 842).
 - Embed microcode `intel-ucode/06-0f-0d` and Intel 3945ABG firmware `iwlwifi-3945-2.ucode`. Validate the T7250 CPUID signature `0x000006fd` and assert exact firmware bytes occur in `vmlinux`.
-- Retain `iwl3945`, Intel HDA/SigmaTel, and PS/2 touchpad modules when the effective config sets them to `m`. Use `SND_HDA_CODEC_SIGMATEL`, not an obsolete codec symbol.
+- Retain `iwl3945`, Intel HDA/SigmaTel, and PS/2 touchpad modules when the effective config sets them to `m`. Use `SND_HDA_CODEC_SIGMATEL`, not an obsolete codec symbol. With the modular HDA controller/codec, Linux 6.12 correctly resolves `SND_HDA=m`; do not assert that this hidden tristate is built in.
 - Preserve the Debian baseline's i915/AGP, SATA/ATAPI, SCSI core/disk/CD, USB mass storage, input mouse interface and nftables FIB values.
 - Normal image requires `CONFIG_PREEMPT_RT=n`; RT image requires `CONFIG_PREEMPT_RT=y` and the native Debian `rt` image target.
 
@@ -44,3 +44,8 @@ Do not use `merge_config.sh` to layer the D630 policy on top of the Debian basel
 4. run `olddefconfig`, fail if override/choice warnings appear, and audit the *resolved* config before compilation;
 5. hard-fail for missing audio/Wi-Fi/i915/storage/filesystem/compressor/microcode/RT requirements or unexplained Debian module `m -> n` drops;
 6. re-audit the config produced by the actual image build before repackaging.
+
+
+## Kernel-family constraints
+
+The upstream Linux 6.12 i915 Kconfig requires `!PREEMPT_RT`. The normal amd64 config must retain the Debian baseline's i915 value; the RT config must accept Kconfig disabling `DRM_I915` and must not claim accelerated i915 graphics. VESA/VGA16 framebuffer options, when enabled in Debian's baseline, are checked for preservation in the RT config.

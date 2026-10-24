@@ -54,7 +54,7 @@ requested = parse_config(overlay.read_text(encoding="utf-8", errors="replace"))
 requested.update({
     "SND": "y",
     "SND_PCI": "y",
-    "SND_HDA": "y",
+    "SND_HDA": "m",
     "SND_HDA_INTEL": "m",
     "SND_HDA_CODEC_SIGMATEL": "m",
     "WLAN": "y",
@@ -89,8 +89,8 @@ requested.update({
     "GENERIC_CPU": "n",
     "X86_MSR": "y",
     "X86_CPUID": "y",
+    "CPU_SUP_INTEL": "y",
     "MICROCODE": "y",
-    "MICROCODE_INTEL": "y",
     "FW_LOADER": "y",
     "EXTRA_FIRMWARE": '"intel-ucode/06-0f-0d iwlwifi-3945-2.ucode"',
     "EXTRA_FIRMWARE_DIR": '"/lib/firmware"',
@@ -230,7 +230,7 @@ for symbol in baseline:
 
 # Critical settings must not be silently overwritten by trimming rules.
 critical = {
-    "MCORE2", "X86_MSR", "X86_CPUID", "MICROCODE", "MICROCODE_INTEL",
+    "MCORE2", "X86_MSR", "X86_CPUID", "CPU_SUP_INTEL", "MICROCODE",
     "EXTRA_FIRMWARE", "EXTRA_FIRMWARE_DIR", "ZRAM", "ZRAM_DEF_COMP_LZ4",
     "ZRAM_BACKEND_LZO", "ZRAM_BACKEND_ZSTD", "ZRAM_BACKEND_LZ4",
     "ZRAM_BACKEND_LZ4HC", "ZRAM_BACKEND_DEFLATE", "ZRAM_BACKEND_842",
@@ -241,6 +241,22 @@ critical = {
 if critical.intersection(disable_reasons):
     bad = sorted(critical.intersection(disable_reasons))
     raise SystemExit("Internal policy contradiction: critical symbols marked disabled: " + ", ".join(bad))
+
+# Fail closed if a required policy symbol is absent from the target source's
+# generated baseline. Do not append misspelled/obsolete CONFIG_* lines and let
+# olddefconfig silently discard them.
+required_policy_symbols = critical | {
+    "CPU_SUP_INTEL", "KERNEL_XZ", "DEBUG_INFO_NONE",
+    "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "FAT_FS", "MSDOS_FS", "VFAT_FS",
+    "EXFAT_FS", "UDF_FS", "SQUASHFS", "SQUASHFS_ZLIB", "SQUASHFS_LZ4",
+    "SQUASHFS_LZO", "SQUASHFS_XZ", "SQUASHFS_ZSTD", "OVERLAY_FS",
+}
+missing_policy_symbols = sorted(required_policy_symbols - set(current))
+if missing_policy_symbols:
+    raise SystemExit(
+        "Required D630 CONFIG_* symbols are missing from this Debian source's generated baseline; "
+        "refusing to guess or append them: " + ", ".join(missing_policy_symbols)
+    )
 
 # Enforce single-value choices before invoking Kconfig.
 zram_choices = [s for s, v in requested.items() if s.startswith("ZRAM_DEF_COMP_") and v == "y"]

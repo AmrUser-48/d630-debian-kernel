@@ -44,8 +44,8 @@ required = {
     "GENERIC_CPU": "n",
     "X86_MSR": "y",
     "X86_CPUID": "y",
+    "CPU_SUP_INTEL": "y",
     "MICROCODE": "y",
-    "MICROCODE_INTEL": "y",
     "FW_LOADER": "y",
     "EXTRA_FIRMWARE": '"intel-ucode/06-0f-0d iwlwifi-3945-2.ucode"',
     "EXTRA_FIRMWARE_DIR": '"/lib/firmware"',
@@ -73,6 +73,17 @@ required = {
     "SQUASHFS_LZO": "y",
     "SQUASHFS_XZ": "y",
     "SQUASHFS_ZSTD": "y",
+    "ZLIB_DEFLATE": "y",
+    "ZLIB_INFLATE": "y",
+    "LZO_COMPRESS": "y",
+    "LZO_DECOMPRESS": "y",
+    "LZ4_COMPRESS": "y",
+    "LZ4_DECOMPRESS": "y",
+    "LZ4HC_COMPRESS": "y",
+    "ZSTD_COMPRESS": "y",
+    "ZSTD_DECOMPRESS": "y",
+    "842_COMPRESS": "y",
+    "842_DECOMPRESS": "y",
     "NLS": "y",
     "NLS_UTF8": "y",
     "NLS_CODEPAGE_437": "y",
@@ -94,7 +105,8 @@ required = {
     "SOUND": "y",
     "SND": "y",
     "SND_PCI": "y",
-    "SND_HDA": "y",
+    "SND_HDA": "m",
+    "SND_HDA_CORE": "m",
     "SND_HDA_INTEL": "m",
     "SND_HDA_CODEC_SIGMATEL": "m",
     "DVB_CORE": "n",
@@ -169,7 +181,7 @@ else:
 # Confirm Debian's generated hardware and firewall infrastructure wasn't
 # accidentally lost or changed while trimming unrelated D630-absent drivers.
 preserve = (
-    "DRM", "DRM_I915", "AGP_INTEL", "SCSI", "SCSI_MOD", "SCSI_COMMON",
+    "DRM", "AGP_INTEL", "FB_VESA", "FB_VGA16", "SCSI", "SCSI_MOD", "SCSI_COMMON",
     "BLK_DEV_SD", "BLK_DEV_SR", "USB_STORAGE", "ATA", "SATA_AHCI", "ATA_PIIX",
     "NF_TABLES", "NETFILTER", "NFT_FIB_INET", "NFT_FIB_IPV4", "NFT_FIB_IPV6",
 )
@@ -177,6 +189,20 @@ for symbol in preserve:
     old, new = val(base, symbol), val(final, symbol)
     if old in {"y", "m"} and old != new:
         errors.append(f"CONFIG_{symbol} changed from Debian baseline {old} to {new}")
+
+# Linux 6.12 upstream makes i915 unavailable with PREEMPT_RT. Keep the stock
+# i915 value for normal kernels, and explicitly audit that the RT Kconfig rule
+# suppresses it rather than treating that known incompatibility as accidental.
+if variant == "amd64":
+    old, new = val(base, "DRM_I915"), val(final, "DRM_I915")
+    if old not in {"y", "m"}:
+        errors.append(f"Debian baseline unexpectedly lacks Intel i915 support: CONFIG_DRM_I915={old}")
+    elif new != old:
+        errors.append(f"normal kernel changed CONFIG_DRM_I915 from Debian baseline {old} to {new}")
+else:
+    if val(final, "DRM_I915") != "n":
+        errors.append(f"RT config must honor upstream DRM_I915 depends on !PREEMPT_RT; got {val(final, 'DRM_I915')}")
+
 
 policy_file = audit_path / "policy-disabled-symbols.tsv"
 policy_symbols: set[str] = set()
@@ -251,6 +277,8 @@ scsi_core = {
 }
 
 def parent_disabled(symbol: str) -> bool:
+    if symbol == "DRM_I915" and variant == "amd64-rt":
+        return True  # Upstream Linux 6.12 requires !PREEMPT_RT for i915.
     if symbol in policy_symbols:
         return True
     if symbol.startswith("SND_") and symbol not in sound_keep:

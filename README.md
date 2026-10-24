@@ -27,7 +27,7 @@ The custom package version sorts after Debian's backport version while preservin
 - **Filesystems:** built-in ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, exFAT and UDF; ISO9660 remains modular. SquashFS is built in with zlib, LZ4, LZO, XZ and Zstd compression.
 - **Wi-Fi:** Intel PRO/Wireless 3945ABG `iwl3945` stays a module. Its exact requested `iwlwifi-3945-2.ucode` firmware is embedded; Debian's `firmware-iwlwifi` package is also published beside the kernel.
 - **CPU microcode:** the T7250 CPUID `0x000006fd` blob `intel-ucode/06-0f-0d` is validated and embedded. The Debian `intel-microcode` package and copyright/license sidecars are included.
-- **Graphics:** preserve Debian's native Intel i915/AGP setting and dependencies for GM965/GMA X3100. This GPU generation does not need modern Intel DMC/GuC/HuC firmware.
+- **Graphics:** preserve Debian's native Intel i915/AGP setting and dependencies for GM965/GMA X3100. This GPU generation does not need modern Intel DMC/GuC/HuC firmware. Linux 6.12's upstream i915 Kconfig depends on `!PREEMPT_RT`, so the RT image intentionally cannot include i915; the RT build cannot use accelerated i915 graphics. The audit also checks that any VESA/VGA16 framebuffer options enabled by Debian's baseline are preserved.
 - **Audio:** preserve the Intel ICH8 HDA/SigmaTel STAC9205 codec path. The correct Linux 6.12 Kconfig symbol is `SND_HDA_CODEC_SIGMATEL`; the module is named `snd-hda-codec-idt`. It needs no separate codec firmware.
 - **Touchpad:** keep `psmouse` modular and unloadable and preserve the built-in legacy `/dev/input/mice` interface for GPM.
 - **Storage/firewall:** preserve SATA/AHCI, PATA/ATAPI, SCSI disk/CD, USB mass storage and Debian's nftables FIB/IPv4/IPv6/inet support.
