@@ -86,8 +86,12 @@ jobs:
             scripts/audit-d630-6.1.180.py \
             scripts/test-d630-kconfig.py
           python3 scripts/test-d630-kconfig.py
-          ruby -e 'require "yaml"; YAML.parse_file(ARGV.fetch(0)); puts "PASS: workflow YAML syntax"' \
-            .github/workflows/d630-kernel-build.yml
+          curl --fail --location --retry 3 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "8aca8db96f1b94770e6d0c23ca2f540b67519ec68db098ddfcfa96059e61f723  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" .github/workflows/d630-kernel-build.yml
 
       - name: Build Debian kernel package / ${{ matrix.variant }}
         timeout-minutes: 330
