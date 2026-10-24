@@ -72,6 +72,7 @@ jobs:
       - name: Reclaim unused runner disk space
         run: |
           set -Eeuo pipefail
+          exec > >(tee -a "build-$BUILD_VARIANT.log") 2>&1
           echo "=== Disk usage before cleanup ==="
           df -h "$GITHUB_WORKSPACE"
           docker system df
@@ -91,6 +92,7 @@ jobs:
       - name: Lint workflow and build scripts
         run: |
           set -Eeuo pipefail
+          exec > >(tee -a "build-$BUILD_VARIANT.log") 2>&1
           bash -n scripts/build-d630-6.1.180.sh
           bash -n scripts/verify-d630-6.1.180-build.sh
           python3 -m py_compile \
@@ -122,6 +124,7 @@ jobs:
       - name: Verify package, configuration & checksums
         run: |
           set -Eeuo pipefail
+          exec > >(tee -a "build-$BUILD_VARIANT.log") 2>&1
           bash scripts/verify-d630-6.1.180-build.sh "$BUILD_VARIANT"
 
       - name: Upload diagnostics on success or failure
