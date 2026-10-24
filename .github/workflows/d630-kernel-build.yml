@@ -160,6 +160,7 @@ jobs:
           test -s "$DIST/RELEASE-NOTES.md"
           gh release create "$TAG" "$DIST"/* \
             --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
             --title "D630 Debian 12 kernel 6.1.180 ($BUILD_VARIANT)" \
             --notes-file "$DIST/RELEASE-NOTES.md" \
             --prerelease
