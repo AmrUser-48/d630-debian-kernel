@@ -119,7 +119,7 @@ jobs:
             --env SOURCE_VERSION \
             --env BUILD_JOBS \
             debian:bookworm \
-            bash -e -o pipefail -c 'bash scripts/build-d630-6.1.180.sh 2>&1 | tee -a "build-${BUILD_VARIANT}.log"'
+            bash -e -o pipefail -c 'bash scripts/build-d630-6.1.180.sh'
 
       - name: Verify package, configuration & checksums
         run: |
