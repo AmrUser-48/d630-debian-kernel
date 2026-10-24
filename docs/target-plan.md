@@ -49,3 +49,6 @@ Do not use `merge_config.sh` to layer the D630 policy on top of the Debian basel
 ## Kernel-family constraints
 
 The upstream Linux 6.12 i915 Kconfig requires `!PREEMPT_RT`. The normal amd64 config must retain the Debian baseline's i915 value; the RT config must accept Kconfig disabling `DRM_I915` and must not claim accelerated i915 graphics. VESA/VGA16 framebuffer options, when enabled in Debian's baseline, are checked for preservation in the RT config.
+
+
+The preflight symbol gate intentionally permits only the one conditional baseline omission above. All other critical CPU, microcode, filesystem, compression, audio, Wi-Fi and choice symbols must already exist in Debian's generated baseline; the final resolved config must then meet the exact expected values.

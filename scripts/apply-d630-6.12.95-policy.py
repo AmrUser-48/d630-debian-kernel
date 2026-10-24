@@ -231,7 +231,7 @@ for symbol in baseline:
 # Critical settings must not be silently overwritten by trimming rules.
 critical = {
     "MCORE2", "X86_MSR", "X86_CPUID", "CPU_SUP_INTEL", "MICROCODE",
-    "EXTRA_FIRMWARE", "EXTRA_FIRMWARE_DIR", "ZRAM", "ZRAM_DEF_COMP_LZ4",
+    "EXTRA_FIRMWARE", "ZRAM", "ZRAM_DEF_COMP_LZ4",
     "ZRAM_BACKEND_LZO", "ZRAM_BACKEND_ZSTD", "ZRAM_BACKEND_LZ4",
     "ZRAM_BACKEND_LZ4HC", "ZRAM_BACKEND_DEFLATE", "ZRAM_BACKEND_842",
     "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "SQUASHFS", "SND", "SND_PCI",
@@ -251,12 +251,21 @@ required_policy_symbols = critical | {
     "EXFAT_FS", "UDF_FS", "SQUASHFS", "SQUASHFS_ZLIB", "SQUASHFS_LZ4",
     "SQUASHFS_LZO", "SQUASHFS_XZ", "SQUASHFS_ZSTD", "OVERLAY_FS",
 }
-missing_policy_symbols = sorted(required_policy_symbols - set(current))
+# EXTRA_FIRMWARE_DIR is intentionally conditional: upstream Kconfig hides it
+# while EXTRA_FIRMWARE is empty in Debian's baseline. Verify its declaration in
+# the pinned source, then add it alongside the nonempty EXTRA_FIRMWARE request.
+conditional_symbols = {"EXTRA_FIRMWARE_DIR"}
+missing_policy_symbols = sorted((required_policy_symbols - set(current)) - conditional_symbols)
 if missing_policy_symbols:
     raise SystemExit(
         "Required D630 CONFIG_* symbols are missing from this Debian source's generated baseline; "
         "refusing to guess or append them: " + ", ".join(missing_policy_symbols)
     )
+if "EXTRA_FIRMWARE_DIR" in requested:
+    firmware_kconfig = source / "drivers/base/firmware_loader/Kconfig"
+    if (not firmware_kconfig.is_file() or
+            not re.search(r"(?m)^config EXTRA_FIRMWARE_DIR$", firmware_kconfig.read_text(encoding="utf-8"))):
+        raise SystemExit("EXTRA_FIRMWARE_DIR is absent from the pinned source Kconfig; refusing to continue.")
 
 # Enforce single-value choices before invoking Kconfig.
 zram_choices = [s for s, v in requested.items() if s.startswith("ZRAM_DEF_COMP_") and v == "y"]
