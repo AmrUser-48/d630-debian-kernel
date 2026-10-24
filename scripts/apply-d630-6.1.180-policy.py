@@ -35,7 +35,7 @@ overlay_text = overlay.read_text(encoding="utf-8").rstrip()
 # codec remain ordinary loadable modules.
 sound_keep = {
     "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA",
-    # SND_PCI is a hard dependency of SND_HDA_INTEL in Linux 6.1.
+    # SND_PCI gates the PCI sound-driver Kconfig menu, including Intel HDA, in Linux 6.1.
     "SND_PCI", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE",
     "SND_HDA_COMPONENT", "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS",
     "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
