@@ -57,6 +57,6 @@ The build preserves Debian's generated settings for Intel i915/AGP, storage, USB
 
 A successful run produces an artifact named like `d630-kernel-amd64-<run-id>-<attempt>` or `d630-kernel-amd64-rt-<run-id>-<attempt>`, containing the installable Debian image, firmware packages, configuration audit, release notes and checksums. Matching uniquely tagged GitHub pre-releases contain the same deliverables.
 
-On failure, open the artifact named `d630-kernel-diagnostics-<variant>-<run-id>-<attempt>`. Start with `build-<variant>.log`, then inspect `audit/<variant>/kconfig-merge.log`, `kconfig-olddefconfig.log`, `native-image-build.log`, `d630-config-symbol-audit.tsv`, and `unclassified-module-drops.txt` where present.
+On failure, open the artifact named `d630-kernel-diagnostics-<variant>-<run-id>-<attempt>`. Start with `build-<variant>.log`, then inspect `audit/<variant>/kconfig-merge.log`, `kconfig-olddefconfig.log`, `native-image-build.log`, `d630-config-symbol-audit.tsv`, `kconfig-fragment-normalization.txt`, and `config-audit-errors.txt`. The installable bundle includes `CONFIG-AUDIT-ERRORS.txt` with an explicit `PASS` status; an unclassified module drop or unresolved Kconfig warning prevents publication.
 
 Hosted CI can verify the source, effective config and package contents. It cannot prove that the kernel boots or that graphics, audio, Wi-Fi, touchpad and firewalld work on the physical D630; test those after installation.
