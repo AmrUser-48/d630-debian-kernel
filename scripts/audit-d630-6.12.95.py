@@ -39,6 +39,7 @@ def val(config: dict[str, str], symbol: str) -> str:
 
 required = {
     "KERNEL_XZ": "y",
+    "KERNEL_XZ": "y",
     "MCORE2": "y",
     "GENERIC_CPU": "n",
     "X86_MSR": "y",
@@ -92,6 +93,7 @@ required = {
     "IWL3945": "m",
     "SOUND": "y",
     "SND": "y",
+    "SND_PCI": "y",
     "SND_HDA": "y",
     "SND_HDA_INTEL": "m",
     "SND_HDA_CODEC_SIGMATEL": "m",
@@ -119,10 +121,15 @@ for symbol, expected in required.items():
     if actual != expected:
         errors.append(f"CONFIG_{symbol}: expected {expected}, got {actual}")
 
+# The compression default is a Kconfig choice: exactly one backend must be selected.
+zram_choice = sorted(s for s, value in final.items() if s.startswith("ZRAM_DEF_COMP_") and value == "y")
+if zram_choice != ["ZRAM_DEF_COMP_LZ4"]:
+    errors.append(f"zram default choice must be only ZRAM_DEF_COMP_LZ4, got {zram_choice}")
+
 # Confirm Debian's generated hardware and firewall infrastructure wasn't
 # accidentally lost or changed while trimming unrelated D630-absent drivers.
 preserve = (
-    "DRM", "DRM_I915", "AGP_INTEL", "SND_PCI", "SCSI", "SCSI_MOD", "SCSI_COMMON",
+    "DRM", "DRM_I915", "AGP_INTEL", "SCSI", "SCSI_MOD", "SCSI_COMMON",
     "BLK_DEV_SD", "BLK_DEV_SR", "USB_STORAGE", "ATA", "SATA_AHCI", "ATA_PIIX",
     "NF_TABLES", "NETFILTER", "NFT_FIB_INET", "NFT_FIB_IPV4", "NFT_FIB_IPV6",
 )
@@ -195,6 +202,7 @@ parent_prefixes = {
     "MTD": ("MTD", "FTL", "INFTL", "NFTL", "RFD_FTL", "SSFDC", "JFFS2_FS", "UBIFS_FS"),
     "XEN": ("XEN",),
     "VIRTIO": ("VIRTIO_",),
+    "EFI": ("EFI_",),
 }
 scsi_core = {
     "SCSI", "SCSI_MOD", "SCSI_COMMON", "SCSI_DMA", "SCSI_NETLINK", "SCSI_PROC_FS",
@@ -288,5 +296,8 @@ if errors:
 
 print("\n".join(summary))
 if unclassified:
-    print("WARNING: review unclassified m-to-n transitions in unclassified-module-drops.txt")
-print("PASS: required D630 kernel configuration verified.")
+    print("FAIL: unclassified Debian m-to-n transitions remain:", file=sys.stderr)
+    print("\n".join("CONFIG_" + symbol for symbol in unclassified), file=sys.stderr)
+    print("Review unclassified-module-drops.txt and classify or preserve these symbols before compiling.", file=sys.stderr)
+    raise SystemExit(1)
+print("PASS: required D630 kernel configuration verified; no unexplained module removals.")

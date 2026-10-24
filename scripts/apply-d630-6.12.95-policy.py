@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Apply the D630 overlay to one native Debian Bookworm-backports image target."""
+"""Apply a D630 policy directly to Debian's generated .config, before olddefconfig."""
 from __future__ import annotations
 
-from difflib import unified_diff
 from pathlib import Path
 import re
 import sys
@@ -17,48 +16,133 @@ featureset = sys.argv[4]
 if featureset not in {"none", "rt"}:
     raise SystemExit("FEATURESET must be none or rt")
 
-baseline = source / f"debian/build/build_amd64_{featureset}_amd64/.config"
-rules = source / "debian/rules.gen"
-target_config = source / "debian/config/d630-core2-6.12.95.config"
-if not baseline.is_file():
-    raise SystemExit(f"Debian-generated {featureset} config not found: {baseline}")
-if not rules.is_file() or not overlay.is_file():
-    raise SystemExit("Debian rules.gen or the committed D630 overlay is missing")
+build_dir = source / f"debian/build/build_amd64_{featureset}_amd64"
+config_path = build_dir / ".config"
+baseline_path = audit / "debian-baseline.config"
+if not config_path.is_file() or not baseline_path.is_file():
+    raise SystemExit("Debian's native .config and saved baseline must exist before policy application")
+if not overlay.is_file():
+    raise SystemExit(f"D630 policy fragment not found: {overlay}")
 
 audit.mkdir(parents=True, exist_ok=True)
 
-def read_config(path: Path) -> dict[str, str]:
+def parse_config(text: str) -> dict[str, str]:
     values: dict[str, str] = {}
-    for line in path.read_text(errors="replace").splitlines():
+    for line in text.splitlines():
         match = re.match(r"^CONFIG_([A-Z0-9_]+)=(.*)$", line)
         if match:
             values[match.group(1)] = match.group(2)
-        else:
-            match = re.match(r"^# CONFIG_([A-Z0-9_]+) is not set$", line)
-            if match:
-                values[match.group(1)] = "n"
+            continue
+        match = re.match(r"^# CONFIG_([A-Z0-9_]+) is not set$", line)
+        if match:
+            values[match.group(1)] = "n"
     return values
 
-base = read_config(baseline)
-symbols = set(base)
-overlay_text = overlay.read_text(encoding="utf-8").rstrip()
+def read_config(path: Path) -> dict[str, str]:
+    return parse_config(path.read_text(encoding="utf-8", errors="replace"))
 
-# These are intentional policy trims on the Debian-generated config. Preserve
-# the actual D630 audio core and SigmaTel codec, not every sound device.
+def config_line(symbol: str, value: str) -> str:
+    return f"# CONFIG_{symbol} is not set" if value == "n" else f"CONFIG_{symbol}={value}"
+
+baseline = read_config(baseline_path)
+current_text = config_path.read_text(encoding="utf-8", errors="replace")
+current = parse_config(current_text)
+requested = parse_config(overlay.read_text(encoding="utf-8", errors="replace"))
+
+# D630 hardware profile: keep the complete Intel HDA PCI dependency chain and
+# the exact Kconfig symbol used by SigmaTel/IDT in this kernel series.
+requested.update({
+    "SND": "y",
+    "SND_PCI": "y",
+    "SND_HDA": "y",
+    "SND_HDA_INTEL": "m",
+    "SND_HDA_CODEC_SIGMATEL": "m",
+    "WLAN": "y",
+    "CFG80211": "m",
+    "MAC80211": "m",
+    "RFKILL": "y",
+    "IWLEGACY": "m",
+    "IWL3945": "m",
+    "MOUSE_PS2": "m",
+    "INPUT_MOUSEDEV": "y",
+    "INPUT_MOUSEDEV_PSAUX": "y",
+    "EXT4_FS": "y",
+    "BTRFS_FS": "y",
+    "NTFS3_FS": "y",
+    "FAT_FS": "y",
+    "MSDOS_FS": "y",
+    "VFAT_FS": "y",
+    "EXFAT_FS": "y",
+    "UDF_FS": "y",
+    "SQUASHFS": "y",
+    "OVERLAY_FS": "y",
+    "ZSMALLOC": "y",
+    "ZRAM": "y",
+    "ZRAM_BACKEND_LZO": "y",
+    "ZRAM_BACKEND_ZSTD": "y",
+    "ZRAM_BACKEND_LZ4": "y",
+    "ZRAM_BACKEND_LZ4HC": "y",
+    "ZRAM_BACKEND_DEFLATE": "y",
+    "ZRAM_BACKEND_842": "y",
+    "ZRAM_DEF_COMP_LZ4": "y",
+    "MCORE2": "y",
+    "GENERIC_CPU": "n",
+    "X86_MSR": "y",
+    "X86_CPUID": "y",
+    "MICROCODE": "y",
+    "MICROCODE_INTEL": "y",
+    "FW_LOADER": "y",
+    "EXTRA_FIRMWARE": '"intel-ucode/06-0f-0d iwlwifi-3945-2.ucode"',
+    "EXTRA_FIRMWARE_DIR": '"/lib/firmware"',
+    "KERNEL_XZ": "y",
+    "DEBUG_INFO_NONE": "y",
+    "DEBUG_INFO": "n",
+    "DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT": "n",
+    "DEBUG_INFO_DWARF4": "n",
+    "DEBUG_INFO_DWARF5": "n",
+    "DEBUG_INFO_BTF": "n",
+    "DEBUG_INFO_BTF_MODULES": "n",
+    "GDB_SCRIPTS": "n",
+    "MODULES": "y",
+    "MODULE_UNLOAD": "y",
+    "DVB_CORE": "n",
+    "MEDIA_DIGITAL_TV_SUPPORT": "n",
+    "MEDIA_RADIO_SUPPORT": "n",
+    "MEDIA_SDR_SUPPORT": "n",
+    "MEDIA_TEST_SUPPORT": "n",
+    "CAN": "n",
+    "ISDN": "n",
+    "INFINIBAND": "n",
+    "FIREWIRE": "n",
+    "NFC": "n",
+    "WIMAX": "n",
+    "IEEE802154": "n",
+    "6LOWPAN": "n",
+    "USB_GADGET": "n",
+    "MTD": "n",
+    "BLK_DEV_NVME": "n",
+    "SCSI_LOWLEVEL": "n",
+})
+if featureset == "rt":
+    requested["EXPERT"] = "y"
+    requested["PREEMPT_RT"] = "y"
+else:
+    requested["PREEMPT_RT"] = "n"
+
+# Kconfig represents the default compressor as a choice. Clear all entries in
+# that choice before setting LZ4 so the staged .config never contains two y's.
+for symbol in current:
+    if symbol.startswith("ZRAM_DEF_COMP_"):
+        requested[symbol] = "n"
+requested["ZRAM_DEF_COMP_LZ4"] = "y"
+
 sound_keep = {
-    "SND", "SND_PCI", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_HDA_INTEL",
-    "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE", "SND_HDA_COMPONENT",
-    "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS", "SND_INTEL_DSP_CONFIG",
-    "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE", "SND_JACK", "SND_CTL_LED",
-    "SND_VMASTER",
+    "SND", "SND_PCI", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA",
+    "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE",
+    "SND_HDA_COMPONENT", "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS",
+    "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
+    "SND_JACK", "SND_CTL_LED", "SND_VMASTER",
 }
-sound_disabled = sorted(
-    symbol for symbol in symbols
-    if symbol.startswith("SND_") and symbol not in sound_keep and base.get(symbol) in {"y", "m"}
-)
-
-# Keep the D630's disk filesystems, boot/live-image filesystems, virtual
-# filesystems, and FUSE. Do not remove configfs/debugfs from the Debian baseline.
 filesystem_keep = {
     "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "FAT_FS", "MSDOS_FS", "VFAT_FS",
     "EXFAT_FS", "UDF_FS", "ISO9660_FS", "SQUASHFS", "OVERLAY_FS", "FUSE_FS",
@@ -69,14 +153,6 @@ filesystem_extras = {
     "NFS_V2", "NFS_V3", "NFS_V4", "NFS_SWAP", "NFSD", "NFSD_V2", "NFSD_V3",
     "NFSD_V4", "SMB_SERVER", "SMB_SERVER_SMBDIRECT",
 }
-filesystem_disabled = sorted(
-    symbol for symbol in symbols
-    if ((symbol.endswith("_FS") and symbol not in filesystem_keep) or symbol in filesystem_extras)
-    and base.get(symbol) in {"y", "m"}
-)
-
-# Prune unrelated GPU drivers while preserving the generic DRM framework,
-# Intel i915, Intel AGP, framebuffer console and their shared dependencies.
 gpu_prefixes = (
     "DRM_AMDGPU", "DRM_RADEON", "DRM_NOUVEAU", "DRM_NVIDIA", "DRM_VMWGFX",
     "DRM_VIRTIO_GPU", "DRM_QXL", "DRM_GMA500", "DRM_AST", "DRM_BOCHS",
@@ -90,89 +166,78 @@ gpu_prefixes = (
     "FB_S3", "FB_3DFX", "FB_VOODOO", "FB_PM2", "FB_PM3", "FB_NEOMAGIC",
     "FB_TG3", "FB_RIVA", "FB_CIRRUS", "FB_SAVAGE", "FB_BROADSHEET", "FB_SM",
     "FB_ARK", "FB_KYRO",
-)
-gpu_disabled = sorted(
-    symbol for symbol in symbols
-    if any(symbol.startswith(prefix) for prefix in gpu_prefixes)
-    and base.get(symbol) in {"y", "m"}
-)
+}
 
-# Start from the native Debian baseline and then apply the D630 overlay last.
-generated = overlay_text + "\n"
-if featureset == "rt":
-    # PREEMPT_RT depends on EXPERT and ARCH_SUPPORTS_RT in this kernel series.
-    generated += "\n# Debian Bookworm backports RT variant requirements.\nCONFIG_EXPERT=y\nCONFIG_PREEMPT_RT=y\n"
-else:
-    generated += "\n# Normal amd64 image: do not enable PREEMPT_RT.\n# CONFIG_PREEMPT_RT is not set\n"
+disable_reasons: dict[str, str] = {}
+for symbol, value in requested.items():
+    if value == "n":
+        disable_reasons[symbol] = "explicit D630 policy"
 
-generated += "\n# Disable unused audio-card and codec families; retain HDA/SigmaTel.\n"
-generated += "".join(f"# CONFIG_{symbol} is not set\n" for symbol in sound_disabled)
-generated += "\n# Disable unrelated filesystems; preserve configfs/debugfs and live boot filesystems.\n"
-generated += "".join(f"# CONFIG_{symbol} is not set\n" for symbol in filesystem_disabled)
-generated += "\n# Disable unrelated vendor GPU drivers; retain Intel i915.\n"
-generated += "".join(f"# CONFIG_{symbol} is not set\n" for symbol in gpu_disabled)
+for symbol in baseline:
+    if symbol.startswith("SND_") and symbol not in sound_keep and baseline[symbol] in {"y", "m"}:
+        requested[symbol] = "n"
+        disable_reasons[symbol] = "unused sound device/codec"
+    if ((symbol.endswith("_FS") and symbol not in filesystem_keep) or symbol in filesystem_extras) and baseline[symbol] in {"y", "m"}:
+        requested[symbol] = "n"
+        disable_reasons[symbol] = "unused filesystem/network filesystem"
+    if any(symbol.startswith(prefix) for prefix in gpu_prefixes) and baseline[symbol] in {"y", "m"}:
+        requested[symbol] = "n"
+        disable_reasons[symbol] = "GPU vendor absent from D630"
 
-# Explicitly document and enforce selected parent-family exclusions. Kconfig
-# handles dependent children; we do not hand-edit every child symbol.
-target_config.parent.mkdir(parents=True, exist_ok=True)
-target_config.write_text(generated, encoding="utf-8")
+# Critical settings must not be silently overwritten by trimming rules.
+critical = {
+    "MCORE2", "X86_MSR", "X86_CPUID", "MICROCODE", "MICROCODE_INTEL",
+    "EXTRA_FIRMWARE", "EXTRA_FIRMWARE_DIR", "ZRAM", "ZRAM_DEF_COMP_LZ4",
+    "ZRAM_BACKEND_LZO", "ZRAM_BACKEND_ZSTD", "ZRAM_BACKEND_LZ4",
+    "ZRAM_BACKEND_LZ4HC", "ZRAM_BACKEND_DEFLATE", "ZRAM_BACKEND_842",
+    "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "SQUASHFS", "SND", "SND_PCI",
+    "SND_HDA", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "IWL3945",
+    "IWLEGACY", "CFG80211", "MAC80211", "MOUSE_PS2",
+}
+if critical.intersection(disable_reasons):
+    bad = sorted(critical.intersection(disable_reasons))
+    raise SystemExit("Internal policy contradiction: critical symbols marked disabled: " + ", ".join(bad))
+
+# Enforce single-value choices before invoking Kconfig.
+zram_choices = [s for s, v in requested.items() if s.startswith("ZRAM_DEF_COMP_") and v == "y"]
+if zram_choices != ["ZRAM_DEF_COMP_LZ4"]:
+    raise SystemExit(f"Expected exactly the LZ4 zram default choice before Kconfig; got {zram_choices}")
+
+# Apply values by rewriting the existing generated config. Unlike merge_config,
+# this does not produce a cascade of override warnings; olddefconfig then
+# resolves dependencies and the separate audit validates its output.
+lines = current_text.splitlines()
+written: set[str] = set()
+output: list[str] = []
+for line in lines:
+    match = re.match(r"^(?:CONFIG_([A-Z0-9_]+)=.*|# CONFIG_([A-Z0-9_]+) is not set)$", line)
+    if not match:
+        output.append(line)
+        continue
+    symbol = match.group(1) or match.group(2)
+    if symbol not in requested:
+        output.append(line)
+        continue
+    if symbol not in written:
+        output.append(config_line(symbol, requested[symbol]))
+        written.add(symbol)
+# Existing generated .config should contain every Kconfig symbol. Add only
+# requested names absent from the baseline so olddefconfig/audit can catch it.
+for symbol in sorted(set(requested) - written):
+    output.append(config_line(symbol, requested[symbol]))
+config_path.write_text("\n".join(output) + "\n", encoding="utf-8")
 
 with (audit / "policy-disabled-symbols.tsv").open("w", encoding="utf-8") as out:
     out.write("symbol\tpolicy\n")
-    for policy, values in (
-        ("unused sound", sound_disabled),
-        ("unused filesystem", filesystem_disabled),
-        ("unrelated GPU", gpu_disabled),
-    ):
-        for symbol in values:
-            out.write(f"{symbol}\t{policy}\n")
-
-# Patch only the selected Debian image target's KCONFIG list. Do not change the
-# Debian version, ABI, localversion, target name, or any generated package rule.
-before = rules.read_text(encoding="utf-8")
-target = f"binary-arch_amd64_{featureset}_amd64_real_image:"
-lines = before.splitlines(keepends=True)
-indices = [i for i, line in enumerate(lines) if line.startswith(target)]
-if len(indices) != 1:
-    raise SystemExit(f"Expected exactly one {target}, found {len(indices)}")
-start = indices[0]
-recipe_index = None
-for i in range(start + 1, min(start + 12, len(lines))):
-    if lines[i].startswith("\t") and "binary_image" in lines[i]:
-        recipe_index = i
-        break
-    if lines[i].strip() and not lines[i].startswith("\t"):
-        break
-if recipe_index is None:
-    raise SystemExit(f"Could not locate the image recipe following {target}")
-recipe = lines[recipe_index]
-match = re.search(r"KCONFIG='([^']*)'", recipe)
-if not match:
-    raise SystemExit(f"Could not parse KCONFIG chain in {target}")
-parts = match.group(1).split()
-config_rel = "debian/config/d630-core2-6.12.95.config"
-if config_rel not in parts:
-    parts.append(config_rel)
-lines[recipe_index] = recipe[:match.start(1)] + " ".join(parts) + recipe[match.end(1):]
-after = "".join(lines)
-rules.write_text(after, encoding="utf-8")
-
-(audit / "rules.gen.diff").write_text(
-    "\n".join(unified_diff(
-        before.splitlines(), after.splitlines(),
-        fromfile="debian/rules.gen.before", tofile="debian/rules.gen.after",
-        lineterm="",
-    )) + "\n",
-    encoding="utf-8",
-)
-(audit / "policy-application.txt").write_text(
-    f"Source package: linux 6.12.95-1~bpo12+1\n"
-    f"Feature set: {featureset}\n"
-    f"Native image target: {target}\n"
-    f"Debian ABI/version/localversion values are not patched.\n"
-    f"D630 config fragment appended last to the target KCONFIG chain.\n"
-    f"Explicit unused sound symbols disabled: {len(sound_disabled)}\n"
-    f"Explicit unused filesystem symbols disabled: {len(filesystem_disabled)}\n"
-    f"Unrelated GPU symbols disabled: {len(gpu_disabled)}\n"
-)
-print(f"Applied D630 overlay to {target}; native Debian ABI rules left intact.")
+    for symbol, reason in sorted(disable_reasons.items()):
+        out.write(f"{symbol}\t{reason}\n")
+with (audit / "policy-application.txt").open("w", encoding="utf-8") as out:
+    out.write(f"Source: Debian Bookworm-backports linux 6.12.95-1~bpo12+1\n")
+    out.write(f"Feature set: {featureset}\n")
+    out.write(f"Native config: {config_path}\n")
+    out.write("Method: direct .config edit followed by Kconfig olddefconfig; no merge_config/fragment override cascade.\n")
+    out.write("zram default: exactly CONFIG_ZRAM_DEF_COMP_LZ4=y before olddefconfig.\n")
+    out.write("SND_PCI and SigmaTel HDA dependencies are explicitly preserved.\n")
+    out.write(f"Explicitly disabled symbols recorded: {len(disable_reasons)}\n")
+print(f"Applied {len(requested)} D630 policy requests directly to {config_path}.")
+print("No Debian rules/ABI/Makefile/localversion values were modified.")

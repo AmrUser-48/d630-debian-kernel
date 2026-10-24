@@ -11,15 +11,15 @@ case "$BUILD_VARIANT" in
     FEATURESET=none
     EXPECTED_RELEASE="6.12.95+deb12-amd64"
     EXPECTED_PACKAGE="linux-image-6.12.95+deb12-amd64"
-    SETUP_TARGET=setup_amd64_none_amd64_real_image
-    BUILD_TARGET=binary-arch_amd64_none_amd64_real_image
+    SETUP_TARGET=setup_amd64_none_amd64
+    BUILD_TARGET=binary-arch_amd64_none_amd64_image
     ;;
   amd64-rt)
     FEATURESET=rt
     EXPECTED_RELEASE="6.12.95+deb12-rt-amd64"
     EXPECTED_PACKAGE="linux-image-6.12.95+deb12-rt-amd64"
-    SETUP_TARGET=setup_amd64_rt_amd64_real_image
-    BUILD_TARGET=binary-arch_amd64_rt_amd64_real_image
+    SETUP_TARGET=setup_amd64_rt_amd64
+    BUILD_TARGET=binary-arch_amd64_rt_amd64_image
     ;;
   *)
     echo "Unsupported BUILD_VARIANT=$BUILD_VARIANT (use amd64 or amd64-rt)." >&2
@@ -168,12 +168,15 @@ chown builder:builder "$AUDIT/debian-baseline.config"
 echo "=== Apply the D630 policy to only the selected native image target ==="
 runuser -u builder -- python3 "$ROOT/scripts/apply-d630-6.12.95-policy.py" \
   "$SOURCE" "$AUDIT" "$ROOT/config/d630-core2-6.12.95.config" "$FEATURESET"
-(
-  cd "$SOURCE"
-  runuser -u builder -- "$SOURCE/scripts/kconfig/merge_config.sh" -m -O "$BUILD" \
-    "$AUDIT/debian-baseline.config" "$SOURCE/debian/config/d630-core2-6.12.95.config"
-) > "$AUDIT/kconfig-merge.log" 2>&1
-runuser -u builder -- make -C "$SOURCE" O="$BUILD" ARCH=x86 olddefconfig
+
+echo "=== Resolve Kconfig dependencies and validate the final .config ==="
+runuser -u builder -- make -C "$SOURCE" O="$BUILD" ARCH=x86 olddefconfig \
+  2>&1 | tee "$AUDIT/olddefconfig.log"
+if grep -Eiq 'warning: override:|changes choice state|reassigning to symbol' "$AUDIT/olddefconfig.log"; then
+  echo "Unexpected Kconfig override/choice warning; refuse to compile." >&2
+  cat "$AUDIT/olddefconfig.log" >&2
+  exit 1
+fi
 cp "$BUILD/.config" "$AUDIT/preflight-final.config"
 python3 "$ROOT/scripts/audit-d630-6.12.95.py" \
   "$AUDIT/debian-baseline.config" "$BUILD/.config" \
@@ -328,6 +331,9 @@ require_module() {
     }
   fi
 }
+require_module cfg80211 CFG80211
+require_module mac80211 MAC80211
+require_module iwlegacy IWLEGACY
 require_module iwl3945 IWL3945
 require_module snd-hda-intel SND_HDA_INTEL
 require_module snd-hda-codec-idt SND_HDA_CODEC_SIGMATEL

@@ -33,3 +33,14 @@ The workflow uploads and publishes only after verification, with unique tags and
 ## Hardware test remains required
 
 Hosted CI cannot validate physical boot. Keep a known-good boot entry. On the actual D630 test legacy-BIOS boot, initramfs generation, SATA/USB storage, i915 graphics, 3945ABG Wi-Fi, HDA audio, touchpad, zram compressors and nftables/firewalld.
+
+
+## Runner configuration must be deterministic
+
+Do not use `merge_config.sh` to layer the D630 policy on top of the Debian baseline: duplicate choice entries create an override cascade that made earlier logs hard to reason about. The runner must:
+1. invoke the exact native `setup_amd64_<featureset>_amd64` target and snapshot Debian's generated `.config`;
+2. edit that actual generated `.config` directly from the committed policy and explicit device rules;
+3. clear all `ZRAM_DEF_COMP_*` choice selections before selecting only `ZRAM_DEF_COMP_LZ4`;
+4. run `olddefconfig`, fail if override/choice warnings appear, and audit the *resolved* config before compilation;
+5. hard-fail for missing audio/Wi-Fi/i915/storage/filesystem/compressor/microcode/RT requirements or unexplained Debian module `m -> n` drops;
+6. re-audit the config produced by the actual image build before repackaging.

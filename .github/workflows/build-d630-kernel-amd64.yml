@@ -53,7 +53,7 @@ jobs:
             scripts/apply-d630-6.12.95-policy.py \
             scripts/audit-d630-6.12.95.py
           grep -q '6.12.95-1~bpo12+1' scripts/build-d630-6.12.95.sh
-          grep -q 'binary-arch_amd64_none_amd64_real_image' scripts/build-d630-6.12.95.sh
+          grep -q 'binary-arch_amd64_none_amd64_image' scripts/build-d630-6.12.95.sh
 
       - name: Build using Debian's native Bookworm-backports source and image target
         shell: bash
@@ -84,8 +84,7 @@ jobs:
           test "$(dpkg-deb -f "$PACKAGE" Version)" = 6.12.95-1~bpo12+1+d6301
           test "$(dpkg-deb -f "$PACKAGE" Architecture)" = amd64
           grep -qx 'Kernel release: 6.12.95+deb12-amd64' "$DIST/BUILD-REPORT.txt"
-          awk -F '\t' '$1=="PREEMPT_RT" && $3=="n" {found=1} END {exit !found}' \
-            "$GITHUB_WORKSPACE/audit/amd64/d630-config-symbol-audit.tsv"
+          grep -qx '# CONFIG_PREEMPT_RT is not set' "$DIST/D630-FINAL-CONFIG"
           test -s "$GITHUB_WORKSPACE/audit/amd64/d630-config.diff"
           test -s "$GITHUB_WORKSPACE/audit/amd64/d630-config-symbol-audit.tsv"
 
