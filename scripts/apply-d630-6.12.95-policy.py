@@ -136,6 +136,50 @@ for symbol in current:
         requested[symbol] = "n"
 requested["ZRAM_DEF_COMP_LZ4"] = "y"
 
+# Normalize all relevant Kconfig choices before olddefconfig.
+# CPU family: every available x86 CPU choice except Merom/Core 2 is disabled.
+cpu_choice = {
+    "M386", "M486", "M486SX", "M586", "M586TSC", "M586MMX", "M686",
+    "MPENTIUMII", "MPENTIUMIII", "MPENTIUMM", "MPENTIUM4", "MK6", "MK7",
+    "MK8", "MK8SSE3", "MCRUSOE", "MEFFICEON", "MATOM", "MCORE2", "MGEODEGX1",
+    "MGEODE_LX", "MPSC", "X86_GENERIC", "GENERIC_CPU", "MVIAC3_2", "MVIAC7",
+    "MWINCHIP3D", "MWINCHIPC6", "MCYRIXIII", "MELAN",
+}
+for symbol in cpu_choice:
+    if symbol in current or symbol in requested:
+        requested[symbol] = "n"
+requested["MCORE2"] = "y"
+requested["GENERIC_CPU"] = "n"
+
+# Exactly one kernel image compressor and one debug-info mode are selected.
+kernel_compression_choice = {
+    "KERNEL_GZIP", "KERNEL_BZIP2", "KERNEL_LZMA", "KERNEL_XZ",
+    "KERNEL_LZO", "KERNEL_LZ4", "KERNEL_ZSTD",
+}
+for symbol in kernel_compression_choice:
+    if symbol in current or symbol in requested:
+        requested[symbol] = "n"
+requested["KERNEL_XZ"] = "y"
+
+debug_info_choice = {
+    "DEBUG_INFO_NONE", "DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT",
+    "DEBUG_INFO_DWARF4", "DEBUG_INFO_DWARF5",
+}
+for symbol in debug_info_choice:
+    if symbol in current or symbol in requested:
+        requested[symbol] = "n"
+requested["DEBUG_INFO_NONE"] = "y"
+
+# The RT flavour replaces the normal preemption choice. Keep Debian's native
+# normal choice unchanged for amd64, but select RT exclusively for amd64-rt.
+if featureset == "rt":
+    for symbol in ("PREEMPT_NONE", "PREEMPT_VOLUNTARY", "PREEMPT"):
+        if symbol in current or symbol in requested:
+            requested[symbol] = "n"
+    requested["PREEMPT_RT"] = "y"
+else:
+    requested["PREEMPT_RT"] = "n"
+
 sound_keep = {
     "SND", "SND_PCI", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA",
     "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE",
@@ -166,7 +210,7 @@ gpu_prefixes = (
     "FB_S3", "FB_3DFX", "FB_VOODOO", "FB_PM2", "FB_PM3", "FB_NEOMAGIC",
     "FB_TG3", "FB_RIVA", "FB_CIRRUS", "FB_SAVAGE", "FB_BROADSHEET", "FB_SM",
     "FB_ARK", "FB_KYRO",
-}
+)
 
 disable_reasons: dict[str, str] = {}
 for symbol, value in requested.items():
@@ -202,6 +246,19 @@ if critical.intersection(disable_reasons):
 zram_choices = [s for s, v in requested.items() if s.startswith("ZRAM_DEF_COMP_") and v == "y"]
 if zram_choices != ["ZRAM_DEF_COMP_LZ4"]:
     raise SystemExit(f"Expected exactly the LZ4 zram default choice before Kconfig; got {zram_choices}")
+cpu_choices = sorted(s for s in cpu_choice if requested.get(s) == "y")
+if cpu_choices != ["MCORE2"]:
+    raise SystemExit(f"Expected only MCORE2 in the CPU choice; got {cpu_choices}")
+kernel_choices = sorted(s for s in kernel_compression_choice if requested.get(s) == "y")
+if kernel_choices != ["KERNEL_XZ"]:
+    raise SystemExit(f"Expected only KERNEL_XZ in the image compression choice; got {kernel_choices}")
+debug_choices = sorted(s for s in debug_info_choice if requested.get(s) == "y")
+if debug_choices != ["DEBUG_INFO_NONE"]:
+    raise SystemExit(f"Expected only DEBUG_INFO_NONE in the debug info choice; got {debug_choices}")
+if featureset == "rt":
+    rt_choices = sorted(s for s in ("PREEMPT_NONE", "PREEMPT_VOLUNTARY", "PREEMPT", "PREEMPT_RT") if requested.get(s) == "y")
+    if rt_choices != ["PREEMPT_RT"]:
+        raise SystemExit(f"Expected only PREEMPT_RT in the RT preemption choice; got {rt_choices}")
 
 # Apply values by rewriting the existing generated config. Unlike merge_config,
 # this does not produce a cascade of override warnings; olddefconfig then

@@ -126,6 +126,46 @@ zram_choice = sorted(s for s, value in final.items() if s.startswith("ZRAM_DEF_C
 if zram_choice != ["ZRAM_DEF_COMP_LZ4"]:
     errors.append(f"zram default choice must be only ZRAM_DEF_COMP_LZ4, got {zram_choice}")
 
+# Validate the effective Kconfig choices after Kconfig has resolved dependencies.
+cpu_choice = {
+    "M386", "M486", "M486SX", "M586", "M586TSC", "M586MMX", "M686",
+    "MPENTIUMII", "MPENTIUMIII", "MPENTIUMM", "MPENTIUM4", "MK6", "MK7",
+    "MK8", "MK8SSE3", "MCRUSOE", "MEFFICEON", "MATOM", "MCORE2", "MGEODEGX1",
+    "MGEODE_LX", "MPSC", "X86_GENERIC", "GENERIC_CPU", "MVIAC3_2", "MVIAC7",
+    "MWINCHIP3D", "MWINCHIPC6", "MCYRIXIII", "MELAN",
+}
+chosen_cpu = sorted(s for s in cpu_choice if val(final, s) == "y")
+if chosen_cpu != ["MCORE2"]:
+    errors.append(f"CPU choice must be only MCORE2, got {chosen_cpu}")
+
+kernel_compression_choice = {
+    "KERNEL_GZIP", "KERNEL_BZIP2", "KERNEL_LZMA", "KERNEL_XZ",
+    "KERNEL_LZO", "KERNEL_LZ4", "KERNEL_ZSTD",
+}
+chosen_kernel_compression = sorted(s for s in kernel_compression_choice if val(final, s) == "y")
+if chosen_kernel_compression != ["KERNEL_XZ"]:
+    errors.append(f"kernel image compression choice must be only KERNEL_XZ, got {chosen_kernel_compression}")
+
+debug_info_choice = {
+    "DEBUG_INFO_NONE", "DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT",
+    "DEBUG_INFO_DWARF4", "DEBUG_INFO_DWARF5",
+}
+chosen_debug_info = sorted(s for s in debug_info_choice if val(final, s) == "y")
+if chosen_debug_info != ["DEBUG_INFO_NONE"]:
+    errors.append(f"debug information choice must be only DEBUG_INFO_NONE, got {chosen_debug_info}")
+
+preemption_choice = ("PREEMPT_NONE", "PREEMPT_VOLUNTARY", "PREEMPT", "PREEMPT_RT")
+chosen_preemption = sorted(s for s in preemption_choice if val(final, s) == "y")
+if variant == "amd64-rt":
+    if chosen_preemption != ["PREEMPT_RT"]:
+        errors.append(f"RT preemption choice must be only PREEMPT_RT, got {chosen_preemption}")
+else:
+    base_preemption = sorted(s for s in preemption_choice if val(base, s) == "y")
+    if val(final, "PREEMPT_RT") != "n":
+        errors.append(f"normal kernel must have PREEMPT_RT=n, got {val(final, 'PREEMPT_RT')}")
+    if chosen_preemption != base_preemption:
+        errors.append(f"normal preemption choice changed from Debian baseline {base_preemption} to {chosen_preemption}")
+
 # Confirm Debian's generated hardware and firewall infrastructure wasn't
 # accidentally lost or changed while trimming unrelated D630-absent drivers.
 preserve = (
