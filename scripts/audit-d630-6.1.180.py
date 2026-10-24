@@ -7,6 +7,8 @@ import difflib
 import re
 import sys
 
+from d630_kconfig import read_config
+
 if len(sys.argv) != 6:
     raise SystemExit(
         "usage: audit-d630-6.1.180.py BASELINE FINAL OVERLAY AUDIT_DIR VARIANT"
@@ -18,18 +20,6 @@ if variant not in {"amd64", "amd64-rt"}:
 audit_path.mkdir(parents=True, exist_ok=True)
 baseline_path, final_path = baseline_path.resolve(), final_path.resolve()
 overlay_path = overlay_path.resolve()
-
-def read_config(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    for line in path.read_text(errors="replace").splitlines():
-        match = re.match(r"^CONFIG_([A-Z0-9_]+)=(.*)$", line)
-        if match:
-            values[match.group(1)] = match.group(2)
-            continue
-        match = re.match(r"^# CONFIG_([A-Z0-9_]+) is not set$", line)
-        if match:
-            values[match.group(1)] = "n"
-    return values
 
 base = read_config(baseline_path)
 final = read_config(final_path)
