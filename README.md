@@ -30,7 +30,7 @@ The workflow has separate deliverable and diagnostic artifacts. The **installabl
 The build follows Debian's native kernel packaging rules, not a generic upstream `defconfig` build:
 
 1. Reclaim unused disk space on the fresh GitHub-hosted runner and report disk use before/after cleanup.
-2. Run syntax checks and unit tests for the Kconfig normalization logic.
+2. Run Bash/Python syntax checks, Kconfig unit tests, and checksummed actionlint validation of the workflow schema and expressions.
 3. Download the pinned Debian source archive and verify its checksums with `dpkg-source`.
 4. Generate Debian's native configuration for the selected featureset.
 5. Apply the D630 overlay once, normalize repeated Kconfig assignments, and reject contradictory assignments.
