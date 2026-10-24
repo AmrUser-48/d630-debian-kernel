@@ -70,7 +70,8 @@ jobs:
           awk -F '\t' '$1=="PREEMPT_RT" && $3=="y" {found=1} END {exit !found}' \
             "$GITHUB_WORKSPACE/audit/amd64-rt/d630-config-symbol-audit.tsv"
 
-      - name: Upload packages, firmware, logs and audit (fail if absent)
+      - name: Upload packages, firmware, logs and audit even when build fails
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: d630-kernel-6.1.180-amd64-rt
@@ -78,7 +79,7 @@ jobs:
             dist/amd64-rt/*
             audit/amd64-rt/*
             build-amd64-rt.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           compression-level: 0
 
