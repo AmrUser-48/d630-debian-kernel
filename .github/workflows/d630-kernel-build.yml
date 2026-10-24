@@ -35,16 +35,13 @@ concurrency:
 jobs:
   build_validate_publish:
     name: Build, validate & publish / ${{ matrix.variant }}
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.variant == 'both' || inputs.variant == matrix.variant }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        variant:
-          - amd64
-          - amd64-rt
+        variant: ${{ fromJSON(inputs.variant == 'amd64' && '["amd64"]' || inputs.variant == 'amd64-rt' && '["amd64-rt"]' || '["amd64","amd64-rt"]') }}
     env:
       BUILD_VARIANT: ${{ matrix.variant }}
       SOURCE_VERSION: "6.1.180-1"
