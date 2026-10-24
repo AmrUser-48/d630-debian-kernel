@@ -1,12 +1,12 @@
-# Kernel workbench status
+# Current kernel workbench state
 
-The earlier prepared-input/build workflow targeted Linux 6.1.187-1 and is retired. It must not be used to produce the requested stock ABI kernel.
+The previous Linux 6.1.180 and 6.1.187 build attempts did not produce a kernel package. Their config/audit and source-package inputs are obsolete for this target; old workflow entry points are retired.
 
-The current target is Debian Bookworm Linux source package 6.1.180-1:
-- normal ABI: 6.1.0-52-amd64
-- RT ABI: 6.1.0-52-rt-amd64
-- custom binary version: 6.1.180-1+d6301
+The active target is Debian 12 Bookworm-backports Linux 6.12.95-1~bpo12+1, verified as the newest listed backport as of 2026-10-25:
+- Normal ABI: `6.12.95+deb12-amd64`.
+- RT ABI: `6.12.95+deb12-rt-amd64`.
+- Custom binary version: `6.12.95-1~bpo12+1+d6301`.
 
-The new pair of workflows downloads the historical Debian source archives directly, validates their source descriptor, prepares the exact feature-set config with Debian's native rules, applies the D630 overlay, audits modules/configuration/firmware, builds only the runtime image target, and fails before publication if the package or checksum set is missing.
+Use only the paired normal and RT workflows. They share one version-pinned build script and produce separate artifacts/releases. They verify package identity, expected module paths, the Core 2 CPU selection, all requested filesystem/zram/SquashFS compressors, the Wi-Fi and audio modules, embedded CPU microcode and Wi-Fi firmware, the RT preemption option, and checksums before publishing.
 
-No physical D630 boot test is performed by hosted CI. Keep a known-good kernel and initramfs entry until both normal or RT build has been tested on the laptop.
+A successful CI run still needs a real boot test on the Dell Latitude D630.

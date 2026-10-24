@@ -1,4 +1,4 @@
-name: Retired D630 kernel workflow (use the 6.1.180 workflows)
+name: Retired D630 kernel build (use Bookworm-backports 6.12.95 workflows)
 
 on:
   workflow_dispatch:
@@ -9,6 +9,6 @@ jobs:
     steps:
       - name: Explain retirement
         run: |
-          echo "This workflow targets the obsolete 6.1.187-1 custom ABI and is retired."
-          echo "Use build-d630-kernel-amd64.yml or build-d630-kernel-amd64-rt.yml."
-          echo "No build ran and no artifact was produced."
+          echo "This older entry point is retired; it builds the wrong kernel version."
+          echo "Use build-d630-kernel-amd64.yml or build-d630-kernel-amd64-rt.yml for Debian 12 Bookworm-backports Linux 6.12.95."
+          echo "No kernel build or artifact upload was performed by this retired workflow."

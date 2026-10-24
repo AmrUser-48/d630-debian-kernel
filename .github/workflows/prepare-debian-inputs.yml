@@ -1,4 +1,4 @@
-name: Retired Debian kernel input workflow (use the 6.1.180 workflows)
+name: Retired input preparation (use Bookworm-backports 6.12.95 workflows)
 
 on:
   workflow_dispatch:
@@ -9,6 +9,6 @@ jobs:
     steps:
       - name: Explain retirement
         run: |
-          echo "This preparation workflow requires obsolete 6.1.187 package/config inputs and is retired."
-          echo "The new 6.1.180 workflows fetch the exact source archives and validate packages end-to-end."
-          echo "No build ran and no artifact was produced."
+          echo "The old 6.1 input-preparation flow is retired."
+          echo "The two 6.12.95 Bookworm-backports workflows now fetch and validate exact sources and firmware end-to-end."
+          echo "No kernel build or artifact upload was performed by this retired workflow."

@@ -1,15 +1,15 @@
-name: Build D630 stripped Debian 12 kernel (amd64-rt)
+name: Build D630 Bookworm-backports kernel 6.12.95 (amd64-rt)
 
 on:
   push:
-    branches: [main, d630-kernel-6.1.180-amd64-rt]
+    branches: [main, d630-kernel-6.12.95-bookworm-backports]
     paths:
       - .github/workflows/build-d630-kernel-amd64.yml
       - .github/workflows/build-d630-kernel-amd64-rt.yml
-      - config/d630-core2-6.1.180.config
-      - scripts/build-d630-6.1.180.sh
-      - scripts/apply-d630-6.1.180-policy.py
-      - scripts/audit-d630-6.1.180.py
+      - config/d630-core2-6.12.95.config
+      - scripts/build-d630-6.12.95.sh
+      - scripts/apply-d630-6.12.95-policy.py
+      - scripts/audit-d630-6.12.95.py
       - README.md
       - docs/**
   workflow_dispatch:
@@ -18,21 +18,24 @@ permissions:
   contents: write
 
 concurrency:
-  group: d630-kernel-6.1.180-amd64-rt
+  group: d630-bookworm-backports-6.12.95-amd64-rt
   cancel-in-progress: false
 
 jobs:
   build:
+    name: Build and verify PREEMPT_RT kernel
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     env:
       BUILD_VARIANT: amd64-rt
-      SOURCE_VERSION: 6.1.180-1
+      SOURCE_VERSION: 6.12.95-1~bpo12+1
       BUILD_JOBS: 2
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v5
 
       - name: Reclaim runner disk space
+        shell: bash
         run: |
           set -euo pipefail
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -41,39 +44,55 @@ jobs:
           docker system prune -af --volumes || true
           df -h "$GITHUB_WORKSPACE"
 
-      - name: Lint scripts
+      - name: Lint shell and Python build scripts
+        shell: bash
         run: |
           set -euo pipefail
-          bash -n scripts/build-d630-6.1.180.sh
-          python3 -m py_compile scripts/apply-d630-6.1.180-policy.py scripts/audit-d630-6.1.180.py
-          grep -q 'binary-arch_amd64_rt_amd64_real_image' scripts/build-d630-6.1.180.sh
+          bash -n scripts/build-d630-6.12.95.sh
+          python3 -m py_compile \
+            scripts/apply-d630-6.12.95-policy.py \
+            scripts/audit-d630-6.12.95.py
+          grep -q '6.12.95-1~bpo12+1' scripts/build-d630-6.12.95.sh
+          grep -q 'binary-arch_amd64_rt_amd64_real_image' scripts/build-d630-6.12.95.sh
 
-      - name: Build with Debian's native amd64-rt image target
+      - name: Build using Debian's native Bookworm-backports RT image target
+        shell: bash
         run: |
           set -euo pipefail
-          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work \
-            -e BUILD_VARIANT -e SOURCE_VERSION -e BUILD_JOBS debian:bookworm \
-            bash -e -o pipefail -c 'bash scripts/build-d630-6.1.180.sh 2>&1 | tee build-amd64-rt.log'
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/work" \
+            --workdir /work \
+            --env BUILD_VARIANT \
+            --env SOURCE_VERSION \
+            --env BUILD_JOBS \
+            debian:bookworm \
+            bash -e -o pipefail -c \
+              'bash scripts/build-d630-6.12.95.sh 2>&1 | tee build-amd64-rt.log'
 
-      - name: Verify installable package, PREEMPT_RT and audit outputs
+      - name: Verify installable package, PREEMPT_RT and config audit
+        shell: bash
         run: |
           set -euo pipefail
           DIST="$GITHUB_WORKSPACE/dist/amd64-rt"
-          PACKAGE="$DIST/linux-image-6.1.0-52-rt-amd64_6.1.180-1+d6301_amd64.deb"
+          PACKAGE="$DIST/linux-image-6.12.95+deb12-rt-amd64_6.12.95-1~bpo12+1+d6301_amd64.deb"
           test -s "$PACKAGE"
           test -s "$DIST"/firmware-iwlwifi_*.deb
           test -s "$DIST"/intel-microcode_*.deb
+          test -s "$DIST/SHA256SUMS"
           (cd "$DIST" && sha256sum -c SHA256SUMS)
-          test "$(dpkg-deb -f "$PACKAGE" Package)" = linux-image-6.1.0-52-rt-amd64
-          test "$(dpkg-deb -f "$PACKAGE" Version)" = 6.1.180-1+d6301
-          grep -qx 'Kernel release: 6.1.0-52-rt-amd64' "$DIST/BUILD-REPORT.txt"
+          test "$(dpkg-deb -f "$PACKAGE" Package)" = linux-image-6.12.95+deb12-rt-amd64
+          test "$(dpkg-deb -f "$PACKAGE" Version)" = 6.12.95-1~bpo12+1+d6301
+          test "$(dpkg-deb -f "$PACKAGE" Architecture)" = amd64
+          grep -qx 'Kernel release: 6.12.95+deb12-rt-amd64' "$DIST/BUILD-REPORT.txt"
           awk -F '\t' '$1=="PREEMPT_RT" && $3=="y" {found=1} END {exit !found}' \
             "$GITHUB_WORKSPACE/audit/amd64-rt/d630-config-symbol-audit.tsv"
+          test -s "$GITHUB_WORKSPACE/audit/amd64-rt/d630-config.diff"
+          test -s "$GITHUB_WORKSPACE/audit/amd64-rt/d630-config-symbol-audit.tsv"
 
-      - name: Upload packages, firmware, logs and audit (fail if absent)
+      - name: Upload package, firmware, logs and audit (fail if any are missing)
         uses: actions/upload-artifact@v4
         with:
-          name: d630-kernel-6.1.180-amd64-rt
+          name: d630-kernel-6.12.95-bookworm-backports-amd64-rt
           path: |
             dist/amd64-rt/*
             audit/amd64-rt/*
@@ -82,14 +101,17 @@ jobs:
           retention-days: 90
           compression-level: 0
 
-      - name: Publish packages and audit to unique pre-release
+      - name: Publish verified build to a unique pre-release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           DIST="$GITHUB_WORKSPACE/dist/amd64-rt"
-          TAG="d630-kernel-6.1.180-amd64-rt-$GITHUB_RUN_ID"
-          gh release create "$TAG" "$DIST"/* --repo "$GITHUB_REPOSITORY" \
-            --title "D630 stripped Debian 12 kernel 6.1.180-1 (amd64-rt)" \
-            --notes-file "$DIST/RELEASE-NOTES.md" --prerelease
+          TAG="d630-kernel-6.12.95-bookworm-backports-amd64-rt-$GITHUB_RUN_ID"
+          gh release create "$TAG" "$DIST"/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "D630 stripped Debian 12 Bookworm-backports kernel 6.12.95 (amd64-rt)" \
+            --notes-file "$DIST/RELEASE-NOTES.md" \
+            --prerelease
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,name,assets

@@ -1,10 +1,12 @@
-# Debian kernel source inputs, work trees and build output
+# Debian kernel build trees and generated outputs
 /prepared-inputs/
 /work/
+/build-work/
+/linux-source/
 /dist/
 /audit/
 /build.log
-/linux-source/
+/build-*.log
 *.deb
 *.dsc
 *.changes

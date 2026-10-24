@@ -1,39 +1,35 @@
-# Target contract — Debian 12 / D630 / Linux 6.1.180-1
+# Target contract — Debian 12 Bookworm-backports / Dell Latitude D630
 
-## Pinned binary ABI
+## Pinned source and ABI
 
-- Debian source package: `linux=6.1.180-1`.
-- Normal image package: `linux-image-6.1.0-52-amd64=6.1.180-1`.
-- RT image package: `linux-image-6.1.0-52-rt-amd64=6.1.180-1`.
-- Custom version suffix: `+d6301`; the output package keeps the stock package name and exact stock kernel release, while the Debian package version is greater than the stock package version.
-- The build reuses Debian's own generated amd64/RT configuration and packaging rules. It must not patch Makefile version components or replace Debian's ABI/LOCALVERSION.
+- Debian suite: `bookworm-backports`, not Trixie/ Debian 13.
+- Source package: `linux=6.12.95-1~bpo12+1`.
+- Normal image release: `6.12.95+deb12-amd64`.
+- RT image release: `6.12.95+deb12-rt-amd64`.
+- Custom package version: `6.12.95-1~bpo12+1+d6301`.
+- Normal package: `linux-image-6.12.95+deb12-amd64`.
+- RT package: `linux-image-6.12.95+deb12-rt-amd64`.
 
-The custom image is unsigned by Debian's kernel signing keys. The D630 uses legacy BIOS, but the operator must keep a known-good boot entry and inspect the final package before installation.
+The source is fetched from APT's signed Bookworm-backports metadata and checked through Debian's source descriptor. Debian's native generated configuration and image target are used for each feature set. Do not patch kernel Makefile version components, `ABINAME`, or `LOCALVERSION`.
 
-## Effective config requirements
+## Core config requirements
 
-- `CONFIG_MCORE2=y`; `CONFIG_GENERIC_CPU` unset; built-in MSR and CPUID.
-- `CONFIG_MODULES=y`, module unloading retained, no blanket m-to-n conversion.
-- Built-in ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, exFAT and UDF; modular ISO9660; built-in SquashFS with zlib/LZ4/LZO/XZ/Zstd.
-- Built-in zram with LZ4 default and the Linux 6.1 compressors enabled: LZO-RLE, Zstd, LZ4, LZO, LZ4HC and 842.
-- Built-in microcode plus embedded Intel PRO/Wireless 3945ABG firmware. Validate CPU microcode CPUID 0x000006fd and assert exact firmware bytes exist in vmlinux.
-- Preserve Debian's i915/Intel AGP, storage, input mouse interface, and nftables FIB values. Do not prune the IWL3945, Intel HDA/Sigmatel or PS/2 touchpad modules.
-- Retain ALSA/HDA core and set the Linux 6.1 Sigmatel Kconfig symbol `SND_HDA_CODEC_SIGMATEL=m`, not the invalid `SND_HDA_CODEC_IDT` symbol.
-- Normal target must not have PREEMPT_RT enabled. RT target must have `CONFIG_PREEMPT_RT=y`.
+- `CONFIG_MCORE2=y`; `CONFIG_GENERIC_CPU` unset; `CONFIG_X86_MSR=y`, `CONFIG_X86_CPUID=y`.
+- `CONFIG_KERNEL_XZ=y`; debug information disabled with `CONFIG_DEBUG_INFO_NONE=y`.
+- `CONFIG_MODULES=y`, module unloading remains enabled, and the PS/2 protocol module remains `CONFIG_MOUSE_PS2=m`.
+- Built-in ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, exFAT and UDF; modular ISO9660; built-in OverlayFS and SquashFS with zlib/LZ4/LZO/XZ/Zstd.
+- Built-in zram with LZ4 default and all 6.12 zram compression backends (LZO, Zstd, LZ4, LZ4HC, DEFLATE, 842).
+- Embed microcode `intel-ucode/06-0f-0d` and Intel 3945ABG firmware `iwlwifi-3945-2.ucode`. Validate the T7250 CPUID signature `0x000006fd` and assert exact firmware bytes occur in `vmlinux`.
+- Retain `iwl3945`, Intel HDA/SigmaTel, and PS/2 touchpad modules when the effective config sets them to `m`. Use `SND_HDA_CODEC_SIGMATEL`, not an obsolete codec symbol.
+- Preserve the Debian baseline's i915/AGP, SATA/ATAPI, SCSI core/disk/CD, USB mass storage, input mouse interface and nftables FIB values.
+- Normal image requires `CONFIG_PREEMPT_RT=n`; RT image requires `CONFIG_PREEMPT_RT=y` and the native Debian `rt` image target.
 
-## Build and publish contract
+## Pipeline acceptance criteria
 
-Each workflow builds only its native Debian image target from the exact 6.1.180-1 source package. Source files are fetched from the official Debian security pool and checked by dpkg-source against the source descriptor. Build dependencies come from current Bookworm metadata, because the old binary package is no longer the current APT candidate.
+Each separate workflow must: fetch exact source version `6.12.95-1~bpo12+1`; generate the matching Debian `none` or `rt` config; apply the D630 overlay to only the target's KCONFIG chain; run `olddefconfig`; audit critical symbols; build only the native runtime image; and verify the exact expected package name, custom version, architecture, `/boot/vmlinuz-<release>`, `/lib/modules/<release>`, required modules, embedded firmware and SHA-256 checksums.
 
-Before any artifact or release is published, the workflow must verify:
-1. The exact expected image package exists, and its package name, version and architecture match.
-2. The package contains `/boot/vmlinuz-<expected release>` and `/lib/modules/<expected release>`.
-3. Required modules exist whenever the effective config sets them to `m`.
-4. The effective config passes the D630 audit, firmware bytes are embedded, and SHA-256 checks pass.
-5. `dist/<variant>/SHA256SUMS` exists and verifies.
+The workflow uploads and publishes only after verification, with unique tags and distinct normal/RT artifact names. Artifact upload is `if-no-files-found: error`; logs without the package are a failed build.
 
-Artifact upload uses `if-no-files-found: error`; each variant uses its own artifact name and a unique GitHub pre-release tag. A failed/missing package must never be represented by a successful artifact upload containing only logs.
+## Hardware test remains required
 
-## Limits
-
-Hosted CI cannot boot the physical laptop. Test legacy-BIOS boot, initramfs generation, SATA/USB storage, i915 graphics, Intel 3945ABG Wi-Fi, HDA audio, PS/2 touchpad and firewalld/nftables on the D630 before relying on the custom kernel.
+Hosted CI cannot validate physical boot. Keep a known-good boot entry. On the actual D630 test legacy-BIOS boot, initramfs generation, SATA/USB storage, i915 graphics, 3945ABG Wi-Fi, HDA audio, touchpad, zram compressors and nftables/firewalld.
