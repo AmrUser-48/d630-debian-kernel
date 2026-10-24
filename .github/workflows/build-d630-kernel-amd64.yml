@@ -19,7 +19,7 @@ permissions:
 
 concurrency:
   group: d630-bookworm-backports-6.12.95-amd64
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
