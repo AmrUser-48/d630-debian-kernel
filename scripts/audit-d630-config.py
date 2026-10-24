@@ -143,7 +143,7 @@ for symbol in ("SCSI", "SCSI_MOD", "SCSI_COMMON", "BLK_DEV_SD", "BLK_DEV_SR", "U
             + " changed from Debian baseline " + baseline_value + " to " + actual
         )
 
-for symbol in ("DRM", "DRM_I915", "AGP_INTEL"):
+for symbol in ("DRM", "DRM_I915", "AGP_INTEL", "SND_PCI"):
     expected = value(official, symbol)
     actual = value(final, symbol)
     if actual != expected:
@@ -250,7 +250,7 @@ DISABLED_CHILDREN = {
 }
 
 SOUND_KEEP = {
-    "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_HDA_INTEL",
+    "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_PCI", "SND_HDA_INTEL",
     "SND_HDA_CODEC", "SND_HDA_CODEC_IDT", "SND_HDA_CORE", "SND_HDA_COMPONENT",
     "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
     "SND_JACK", "SND_CTL_LED",
