@@ -123,7 +123,7 @@ required = {
     "DVB_CORE": "n",
     "RADIO_ADAPTERS": "n",
     "MTD": "n",
-    "SND": "m",
+    "SND": "m", "SND_PCI": "y",
     "SND_HDA_INTEL": "m",
     "SND_HDA_CODEC_IDT": "m",
 }
