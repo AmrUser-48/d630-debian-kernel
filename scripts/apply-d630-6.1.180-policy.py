@@ -45,11 +45,16 @@ overlay_text = overlay.read_text(encoding="utf-8").rstrip()
 # codec remain ordinary loadable modules.
 sound_keep = {
     "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA",
-    "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE",
+    # SND_PCI is a hard dependency of SND_HDA_INTEL in Linux 6.1.
+    "SND_PCI", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE",
     "SND_HDA_COMPONENT", "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS",
     "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
     "SND_JACK", "SND_CTL_LED", "SND_VMASTER",
 }
+required_sound_keep = {"SND_PCI", "SND_HDA", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL"}
+if not required_sound_keep.issubset(sound_keep):
+    raise SystemExit("Audio policy is missing required HDA dependencies: " + ", ".join(sorted(required_sound_keep - sound_keep)))
+
 sound_disabled = sorted(
     s for s in symbols if s.startswith("SND_") and s not in sound_keep
     and baseline.get(s, "n") in {"y", "m"}
