@@ -52,6 +52,7 @@ for file in \
   "$DIST/D630-CONFIG-DIFF.txt" \
   "$DIST/D630-CONFIG-AUDIT.tsv" \
   "$DIST/CONFIG-AUDIT-SUMMARY.txt" \
+  "$DIST/CONFIG-AUDIT-ERRORS.txt" \
   "$DIST/UNCLASSIFIED-MODULE-DROPS.txt" \
   "$DIST/POLICY-DISABLED-SYMBOLS.tsv" \
   "$DIST/MICROCODE-VALIDATION.txt" \
@@ -66,6 +67,8 @@ require_file "$FINAL_CONFIG"
 require_file "$AUDIT/d630-config-symbol-audit.tsv"
 require_file "$AUDIT/kconfig-fragment-normalization.txt"
 require_file "$AUDIT/config-audit-summary.txt"
+require_file "$AUDIT/config-audit-errors.txt"
+grep -Fqx "PASS" "$AUDIT/config-audit-errors.txt" || fail "configuration audit recorded errors"
 require_file "$AUDIT/kconfig-olddefconfig.log"
 require_file "$AUDIT/native-image-build.log"
 
