@@ -215,9 +215,17 @@ for symbol in sorted(set(base) | set(final)):
     encoding="utf-8",
 )
 (audit_path / "unclassified-module-drops.txt").write_text(
-    "\n".join("CONFIG_" + s for s in unexpected_drops) + ("\n" if unexpected_drops else ""),
+    ("\n".join("CONFIG_" + s for s in unexpected_drops) + "\n")
+    if unexpected_drops
+    else "None: all Debian m -> n transitions are classified.\n",
     encoding="utf-8",
 )
+
+if unexpected_drops:
+    errors.append(
+        "Unclassified Debian m -> n transitions are fatal: "
+        + ", ".join("CONFIG_" + s for s in unexpected_drops)
+    )
 
 report = [
     f"Variant: {variant}",
@@ -225,10 +233,14 @@ report = [
     f"Final config: {final_path}",
     f"Symbols changed: {len(changes)}",
     f"Unclassified Debian m -> n transitions: {len(unexpected_drops)}",
-    "Unclassified transitions are included in the TSV and are not allowed to hide any of the explicitly asserted critical hardware symbols.",
+    "Every unclassified Debian m -> n transition is fatal; classify intentional policy changes explicitly.",
     "Critical checks: Core 2 target, embedded CPU+Wi-Fi firmware, zram compressors, filesystem support, audio, Wi-Fi, PREEMPT_RT flavour, i915 baseline, storage, and nftables baseline.",
 ]
 (audit_path / "config-audit-summary.txt").write_text("\n".join(report) + "\n", encoding="utf-8")
+(audit_path / "config-audit-errors.txt").write_text(
+    ("\n".join("FAIL: " + error for error in errors) + "\n") if errors else "PASS\n",
+    encoding="utf-8",
+)
 
 if errors:
     print("\n".join("FAIL: " + e for e in errors), file=sys.stderr)
