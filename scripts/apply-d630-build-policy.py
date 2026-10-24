@@ -115,7 +115,7 @@ gpu_disabled = sorted(
 sound_policy = (
     "\n# D630 audio: Intel ICH8 HD Audio plus the Sigmatel/IDT codec only.\n"
     "# All other Debian sound drivers/codecs are explicitly disabled by the build policy.\n"
-    "CONFIG_SND=m\nCONFIG_SND_PCI=y\nCONFIG_SND_HDA_INTEL=m\nCONFIG_SND_HDA_CODEC_IDT=m\n"
+    "CONFIG_SND=y\nCONFIG_SND_PCI=y\nCONFIG_SND_HDA=y\nCONFIG_SND_HDA_INTEL=m\nCONFIG_SND_HDA_CODEC_IDT=m\n"
     + "".join("# CONFIG_" + symbol + " is not set\n" for symbol in sound_disabled)
     + "\n# D630 filesystems: only requested disk filesystems; pseudo-filesystems remain independently configured.\n"
     + "".join("# CONFIG_" + symbol + " is not set\n" for symbol in filesystem_disabled)
@@ -123,7 +123,51 @@ sound_policy = (
     + "".join("# CONFIG_" + symbol + " is not set\n" for symbol in gpu_disabled)
 )
 target_config.parent.mkdir(parents=True, exist_ok=True)
-target_config.write_text(overlay.read_text().rstrip() + sound_policy)
+fragment = overlay.read_text(encoding="utf-8").rstrip() + sound_policy
+
+
+def normalize_kconfig_fragment(text):
+    """Collapse identical duplicate assignments and reject contradictory ones."""
+    values = {}
+    output = []
+    duplicates = []
+    set_re = re.compile(r"^CONFIG_([A-Z0-9_]+)=(.*)$")
+    unset_re = re.compile(r"^# CONFIG_([A-Z0-9_]+) is not set$")
+    for line in text.splitlines():
+        match = set_re.match(line)
+        if match:
+            symbol, requested = match.group(1), match.group(2)
+        else:
+            match = unset_re.match(line)
+            if not match:
+                output.append(line)
+                continue
+            symbol, requested = match.group(1), "n"
+        if symbol in values:
+            if values[symbol] != requested:
+                raise SystemExit(
+                    "Conflicting duplicate Kconfig assignments for CONFIG_"
+                    + symbol + ": " + values[symbol] + " versus " + requested
+                )
+            duplicates.append(symbol)
+            continue
+        values[symbol] = requested
+        output.append(line)
+    normalized = "\n".join(output).rstrip() + "\n"
+    return normalized, sorted(set(duplicates))
+
+
+fragment, collapsed = normalize_kconfig_fragment(fragment)
+target_config.write_text(fragment, encoding="utf-8")
+(audit / "kconfig-fragment-normalization.txt").write_text(
+    "Unique Kconfig symbols: "
+    + str(sum(1 for line in fragment.splitlines()
+              if line.startswith("CONFIG_") or line.startswith("# CONFIG_")))
+    + "\nIdentical repeated assignments collapsed: " + str(len(collapsed)) + "\n"
+    + "".join("CONFIG_" + symbol + "\n" for symbol in collapsed)
+    + "Conflicting repeated assignments: 0\n",
+    encoding="utf-8",
+)
 (audit / "sound-policy-disabled-symbols.txt").write_text(
     "Allowed D630 sound stack: ALSA core, Intel HDA, IDT/Sigmatel codec and required dependencies.\n"
     + "".join("CONFIG_" + symbol + "=n\n" for symbol in sound_disabled)
