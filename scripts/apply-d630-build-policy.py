@@ -55,7 +55,7 @@ rules_before = rules.read_text()
 # Keep the ALSA core and this one driver/codec; explicitly turn off every
 # other sound Kconfig option present in Debian's generated baseline.
 sound_keep = {
-    "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_HDA_INTEL",
+    "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_PCI", "SND_HDA_INTEL",
     "SND_HDA_CODEC", "SND_HDA_CODEC_IDT", "SND_HDA_CORE", "SND_HDA_COMPONENT",
     "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
     "SND_JACK", "SND_CTL_LED",
@@ -65,6 +65,10 @@ for raw in baseline_config.read_text(errors="replace").splitlines():
     match = re.match(r"^(?:CONFIG_([A-Z0-9_]+)=|# CONFIG_([A-Z0-9_]+) is not set$)", raw)
     if match:
         config_symbols.add(match.group(1) or match.group(2))
+required_sound_keep = {"SND_PCI", "SND_HDA", "SND_HDA_INTEL", "SND_HDA_CODEC_IDT"}
+if not required_sound_keep.issubset(sound_keep):
+    raise SystemExit("Audio policy is missing required HDA dependencies: " + ", ".join(sorted(required_sound_keep - sound_keep)))
+
 sound_disabled = sorted(
     symbol for symbol in config_symbols
     if symbol.startswith("SND_") and symbol not in sound_keep
