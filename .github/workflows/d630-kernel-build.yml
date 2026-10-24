@@ -10,9 +10,6 @@ on:
       - ".github/workflows/**"
       - "config/d630-core2-6.1.180.config"
       - "scripts/**"
-      - "docs/**"
-      - "README.md"
-      - ".gitignore"
   workflow_dispatch:
     inputs:
       variant:
@@ -30,7 +27,7 @@ permissions:
 
 concurrency:
   group: d630-kernel-build-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build_validate_publish:
