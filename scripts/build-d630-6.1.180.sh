@@ -152,7 +152,11 @@ runuser -u builder -- python3 "$ROOT/scripts/apply-d630-6.1.180-policy.py" \
   runuser -u builder -- "$SOURCE/scripts/kconfig/merge_config.sh" -m -O "$BUILD" \
     "$AUDIT/debian-baseline.config" "$SOURCE/debian/config/d630-core2-6.1.180.config"
 ) > "$AUDIT/kconfig-merge.log" 2>&1
-runuser -u builder -- make -C "$SOURCE" O="$BUILD" ARCH=x86 olddefconfig
+runuser -u builder -- make -C "$SOURCE" O="$BUILD" ARCH=x86 olddefconfig 2>&1 | tee "$AUDIT/kconfig-olddefconfig.log"
+if grep -Ein 'warning: override:' "$AUDIT/kconfig-olddefconfig.log"; then
+  echo "FAIL: Kconfig emitted override warnings during olddefconfig; refusing to compile." >&2
+  exit 1
+fi
 cp "$BUILD/.config" "$AUDIT/preflight-final.config"
 python3 "$ROOT/scripts/audit-d630-6.1.180.py" \
   "$AUDIT/debian-baseline.config" "$BUILD/.config" \
@@ -166,6 +170,10 @@ runuser -u builder -- env \
   KCFLAGS="-mtune=core2" \
   make -C "$SOURCE" -f debian/rules.gen "$BUILD_TARGET" \
   2>&1 | tee "$AUDIT/native-image-build.log"
+if grep -Ein 'warning: override:' "$AUDIT/native-image-build.log"; then
+  echo "FAIL: Kconfig emitted override warnings during the native build; refusing to package." >&2
+  exit 1
+fi
 
 echo "=== Audit the actual post-build config and both embedded firmware blobs ==="
 test -s "$BUILD/.config"
