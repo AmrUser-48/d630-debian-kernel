@@ -76,7 +76,7 @@ for symbol, expected in required.items():
 # These must stay at Debian's generated values. This specifically protects
 # Intel i915/AGP, normal disk and USB storage, and firewall/netfilter support.
 preserve = (
-    "DRM", "DRM_I915", "AGP_INTEL", "SCSI", "SCSI_MOD", "SCSI_COMMON",
+    "DRM", "DRM_I915", "AGP_INTEL", "SND_PCI", "SCSI", "SCSI_MOD", "SCSI_COMMON",
     "BLK_DEV_SD", "BLK_DEV_SR", "USB_STORAGE", "ATA", "SATA_AHCI", "ATA_PIIX",
     "NF_TABLES", "NETFILTER", "NFT_FIB_INET", "NFT_FIB_IPV4", "NFT_FIB_IPV6",
     "INPUT_MOUSEDEV", "INPUT_MOUSEDEV_PSAUX",
@@ -99,7 +99,7 @@ if policy_file.is_file():
 
 sound_keep = {
     "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_HDA_INTEL",
-    "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE", "SND_HDA_COMPONENT",
+    "SND_PCI", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE", "SND_HDA_COMPONENT",
     "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS", "SND_INTEL_DSP_CONFIG",
     "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE", "SND_JACK", "SND_CTL_LED", "SND_VMASTER",
 }
