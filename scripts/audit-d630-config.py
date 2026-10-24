@@ -134,7 +134,7 @@ for symbol, expected in required.items():
 
 # Pruning host adapters must not remove the generic SCSI mid-layer, disk driver,
 # optical-drive driver, or USB mass storage used by normal laptop peripherals.
-for symbol in ("SCSI", "SCSI_MOD", "SCSI_COMMON", "BLK_DEV_SD", "BLK_DEV_SR", "USB_STORAGE"):
+for symbol in ("SCSI", "SCSI_MOD", "SCSI_COMMON", "BLK_DEV_SD", "BLK_DEV_SR", "USB_STORAGE", "SND_PCI"):
     baseline_value = value(baseline, symbol)
     actual = value(final, symbol)
     if baseline_value in ("y", "m") and actual != baseline_value:
@@ -143,7 +143,7 @@ for symbol in ("SCSI", "SCSI_MOD", "SCSI_COMMON", "BLK_DEV_SD", "BLK_DEV_SR", "U
             + " changed from Debian baseline " + baseline_value + " to " + actual
         )
 
-for symbol in ("DRM", "DRM_I915", "AGP_INTEL", "SND_PCI"):
+for symbol in ("DRM", "DRM_I915", "AGP_INTEL"):
     expected = value(official, symbol)
     actual = value(final, symbol)
     if actual != expected:
