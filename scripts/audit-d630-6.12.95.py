@@ -122,7 +122,7 @@ for symbol, expected in required.items():
 # Confirm Debian's generated hardware and firewall infrastructure wasn't
 # accidentally lost or changed while trimming unrelated D630-absent drivers.
 preserve = (
-    "DRM", "DRM_I915", "AGP_INTEL", "SCSI", "SCSI_MOD", "SCSI_COMMON",
+    "DRM", "DRM_I915", "AGP_INTEL", "SND_PCI", "SCSI", "SCSI_MOD", "SCSI_COMMON",
     "BLK_DEV_SD", "BLK_DEV_SR", "USB_STORAGE", "ATA", "SATA_AHCI", "ATA_PIIX",
     "NF_TABLES", "NETFILTER", "NFT_FIB_INET", "NFT_FIB_IPV4", "NFT_FIB_IPV6",
 )
@@ -139,7 +139,7 @@ if policy_file.is_file():
             policy_symbols.add(line.split("\t", 1)[0])
 
 sound_keep = {
-    "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_HDA_INTEL",
+    "SND", "SND_PCI", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_HDA_INTEL",
     "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE", "SND_HDA_COMPONENT",
     "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS", "SND_INTEL_DSP_CONFIG",
     "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE", "SND_JACK", "SND_CTL_LED", "SND_VMASTER",

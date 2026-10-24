@@ -56,19 +56,24 @@ printf 'Custom binary version: %s\n' "$IMAGE_VERSION"
 echo "=== Configure Debian Bookworm and Bookworm-backports repositories ==="
 rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources
 cat > /etc/apt/sources.list.d/d630-bookworm.list <<'SOURCES'
-deb https://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
-deb https://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
-deb https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
-deb https://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware
-deb-src https://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
-deb-src https://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
-deb-src https://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
-deb-src https://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware
+deb-src http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb-src http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+deb-src http://security.debian.org/debian-security bookworm-security main contrib non-free-firmware
+deb-src http://deb.debian.org/debian bookworm-backports main contrib non-free non-free-firmware
 SOURCES
-apt-get update
-apt-get install -y --no-install-recommends ca-certificates curl dpkg-dev xz-utils zstd lz4 iucode-tool
-apt-get update
 
+# Bootstrap only the CA bundle over HTTP. APT still authenticates Debian's
+# InRelease metadata using its trusted archive keyring. All later traffic uses HTTPS.
+apt-get update
+apt-get install -y --no-install-recommends ca-certificates
+sed -i 's#http://#https://#g' /etc/apt/sources.list.d/d630-bookworm.list
+apt-get update
+apt-get install -y --no-install-recommends curl dpkg-dev xz-utils zstd lz4 iucode-tool
+apt-get update
 echo "=== Install build dependencies for the exact backported source version ==="
 apt-get build-dep -y -t bookworm-backports "linux=$SOURCE_VERSION"
 apt-get install -y --no-install-recommends \
