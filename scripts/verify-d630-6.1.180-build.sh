@@ -74,8 +74,6 @@ echo "=== Verify Debian package identity ==="
 [[ "$(dpkg-deb -f "$PACKAGE" Version)" == "6.1.180-1+d6301" ]] || fail "unexpected package version"
 [[ "$(dpkg-deb -f "$PACKAGE" Architecture)" == "amd64" ]] || fail "unexpected package architecture"
 grep -Fqx "Kernel release: $EXPECTED_RELEASE" "$DIST/BUILD-REPORT.txt" || fail "build report has the wrong kernel release"
-[[ -d "$(mktemp -d)" ]] || fail "temporary directory creation failed"
-rm -rf "$(find "$DIST" -maxdepth 1 -type d -name '.never-match-d630-check' -print -quit)"
 
 echo "=== Verify effective D630 configuration ==="
 require_config MCORE2 y
@@ -103,12 +101,6 @@ require_config PREEMPT_RT "$EXPECTED_RT"
 if grep -Eiq 'warning: override:|changes choice state' \
   "$AUDIT/kconfig-olddefconfig.log" "$AUDIT/native-image-build.log"; then
   fail "Kconfig override/choice warnings remain in configuration or build logs"
-fi
-if grep -Eq '^CONFIG_(SND_HDA|SND_PCI|SND_HDA_INTEL|SND_HDA_CODEC_SIGMATEL)=(n|m)$' "$FINAL_CONFIG"; then
-  # SND_HDA_INTEL and codec are expected modules; only the built-in core/PCI
-  # settings are required to be y. Check each explicitly below rather than
-  # allowing one broad regular expression to hide an unexpected state.
-  :
 fi
 grep -Fqx 'CONFIG_SND_HDA=y' "$FINAL_CONFIG" || fail "HDA core is not built in"
 grep -Fqx 'CONFIG_SND_PCI=y' "$FINAL_CONFIG" || fail "ALSA PCI core is not built in"
