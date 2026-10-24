@@ -115,7 +115,7 @@ gpu_disabled = sorted(
 sound_policy = (
     "\n# D630 audio: Intel ICH8 HD Audio plus the Sigmatel/IDT codec only.\n"
     "# All other Debian sound drivers/codecs are explicitly disabled by the build policy.\n"
-    "CONFIG_SND=m\nCONFIG_SND_HDA_INTEL=m\nCONFIG_SND_HDA_CODEC_IDT=m\n"
+    "CONFIG_SND=m\nCONFIG_SND_PCI=y\nCONFIG_SND_HDA_INTEL=m\nCONFIG_SND_HDA_CODEC_IDT=m\n"
     + "".join("# CONFIG_" + symbol + " is not set\n" for symbol in sound_disabled)
     + "\n# D630 filesystems: only requested disk filesystems; pseudo-filesystems remain independently configured.\n"
     + "".join("# CONFIG_" + symbol + " is not set\n" for symbol in filesystem_disabled)
