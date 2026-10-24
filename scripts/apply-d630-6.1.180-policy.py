@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import sys
 
+from d630_kconfig import normalize_fragment, parse_config_text, read_config
+
 if len(sys.argv) != 5:
     raise SystemExit("usage: apply-d630-6.1.180-policy.py SOURCE AUDIT OVERLAY FEATURESET")
 
@@ -23,18 +25,6 @@ if not baseline_path.is_file():
     raise SystemExit(f"Debian-generated config missing: {baseline_path}")
 if not rules_path.is_file() or not overlay.is_file():
     raise SystemExit("Debian rules or committed D630 overlay is missing")
-
-def read_config(path: Path) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for line in path.read_text(errors="replace").splitlines():
-        match = re.match(r"^CONFIG_([A-Z0-9_]+)=(.*)$", line)
-        if match:
-            result[match.group(1)] = match.group(2)
-            continue
-        match = re.match(r"^# CONFIG_([A-Z0-9_]+) is not set$", line)
-        if match:
-            result[match.group(1)] = "n"
-    return result
 
 baseline = read_config(baseline_path)
 symbols = set(baseline)
@@ -167,54 +157,11 @@ generated += "\n# Child drivers disabled because their parent subsystem is exclu
 generated += "".join(f"# CONFIG_{s} is not set\n" for s in sorted(set(child_disabled)))
 
 target_config.parent.mkdir(parents=True, exist_ok=True)
-def normalize_kconfig_fragment(text: str) -> tuple[str, list[str]]:
-    """Collapse identical duplicate assignments; reject contradictory ones."""
-    values: dict[str, str] = {}
-    output: list[str] = []
-    duplicates: list[str] = []
-    set_re = re.compile(r"^CONFIG_([A-Z0-9_]+)=(.*)$")
-    unset_re = re.compile(r"^# CONFIG_([A-Z0-9_]+) is not set$")
-    for line in text.splitlines():
-        match = set_re.match(line)
-        if match:
-            symbol, requested = match.group(1), match.group(2)
-        else:
-            match = unset_re.match(line)
-            if not match:
-                output.append(line)
-                continue
-            symbol, requested = match.group(1), "n"
-        if symbol in values:
-            if values[symbol] != requested:
-                raise SystemExit(
-                    f"Conflicting duplicate Kconfig assignments for CONFIG_{symbol}: "
-                    f"{values[symbol]} versus {requested}"
-                )
-            duplicates.append(symbol)
-            continue
-        values[symbol] = requested
-        output.append(line)
-    return "\n".join(output).rstrip() + "\n", sorted(set(duplicates))
-
-
-def values_in_fragment(text: str) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for line in text.splitlines():
-        match = re.match(r"^CONFIG_([A-Z0-9_]+)=(.*)$", line)
-        if match:
-            result[match.group(1)] = match.group(2)
-            continue
-        match = re.match(r"^# CONFIG_([A-Z0-9_]+) is not set$", line)
-        if match:
-            result[match.group(1)] = "n"
-    return result
-
-
-generated, collapsed = normalize_kconfig_fragment(generated)
+generated, collapsed = normalize_fragment(generated)
 target_config.write_text(generated, encoding="utf-8")
 (audit / "kconfig-fragment-normalization.txt").write_text(
     f"Effective D630 fragment: {target_config}\n"
-    f"Unique CONFIG symbols: {len(values_in_fragment(generated))}\n"
+    f"Unique Kconfig symbols: {len(parse_config_text(generated))}\n"
     f"Identical repeated assignments collapsed: {len(collapsed)}\n"
     + "".join(f"CONFIG_{symbol}\n" for symbol in collapsed)
     + "Conflicting repeated assignments: 0\n",
