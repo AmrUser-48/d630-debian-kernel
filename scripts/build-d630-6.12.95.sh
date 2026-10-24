@@ -180,7 +180,7 @@ fi
 cp "$BUILD/.config" "$AUDIT/preflight-final.config"
 python3 "$ROOT/scripts/audit-d630-6.12.95.py" \
   "$AUDIT/debian-baseline.config" "$BUILD/.config" \
-  "$SOURCE/debian/config/d630-core2-6.12.95.config" "$AUDIT" "$BUILD_VARIANT"
+  "$ROOT/config/d630-core2-6.12.95.config" "$AUDIT" "$BUILD_VARIANT"
 
 echo "=== Build only the native Debian runtime image target ==="
 runuser -u builder -- env \
@@ -195,7 +195,7 @@ test -s "$BUILD/.config"
 cp "$BUILD/.config" "$AUDIT/d630-final.config"
 python3 "$ROOT/scripts/audit-d630-6.12.95.py" \
   "$AUDIT/debian-baseline.config" "$BUILD/.config" \
-  "$SOURCE/debian/config/d630-core2-6.12.95.config" "$AUDIT" "$BUILD_VARIANT"
+  "$ROOT/config/d630-core2-6.12.95.config" "$AUDIT" "$BUILD_VARIANT"
 test -s "$BUILD/vmlinux" || {
   find "$SOURCE/debian/build" -maxdepth 6 -type f -name vmlinux -print >&2 || true
   echo "Uncompressed vmlinux was not found after the image build." >&2
