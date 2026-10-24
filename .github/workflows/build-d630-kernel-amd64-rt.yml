@@ -1,0 +1,95 @@
+name: Build D630 stripped Debian 12 kernel (amd64-rt)
+
+on:
+  push:
+    branches: [main, d630-kernel-6.1.180-amd64-rt]
+    paths:
+      - .github/workflows/build-d630-kernel-amd64.yml
+      - .github/workflows/build-d630-kernel-amd64-rt.yml
+      - config/d630-core2-6.1.180.config
+      - scripts/build-d630-6.1.180.sh
+      - scripts/apply-d630-6.1.180-policy.py
+      - scripts/audit-d630-6.1.180.py
+      - README.md
+      - docs/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: d630-kernel-6.1.180-amd64-rt
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    env:
+      BUILD_VARIANT: amd64-rt
+      SOURCE_VERSION: 6.1.180-1
+      BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reclaim runner disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost /usr/share/swift /usr/lib/mono \
+            /opt/hostedtoolcache/CodeQL
+          docker system prune -af --volumes || true
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Lint scripts
+        run: |
+          set -euo pipefail
+          bash -n scripts/build-d630-6.1.180.sh
+          python3 -m py_compile scripts/apply-d630-6.1.180-policy.py scripts/audit-d630-6.1.180.py
+          grep -q 'binary-arch_amd64_rt_amd64_real_image' scripts/build-d630-6.1.180.sh
+
+      - name: Build with Debian's native amd64-rt image target
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work \
+            -e BUILD_VARIANT -e SOURCE_VERSION -e BUILD_JOBS debian:bookworm \
+            bash -e -o pipefail -c 'bash scripts/build-d630-6.1.180.sh 2>&1 | tee build-amd64-rt.log'
+
+      - name: Verify installable package, PREEMPT_RT and audit outputs
+        run: |
+          set -euo pipefail
+          DIST="$GITHUB_WORKSPACE/dist/amd64-rt"
+          PACKAGE="$DIST/linux-image-6.1.0-52-rt-amd64_6.1.180-1+d6301_amd64.deb"
+          test -s "$PACKAGE"
+          test -s "$DIST"/firmware-iwlwifi_*.deb
+          test -s "$DIST"/intel-microcode_*.deb
+          (cd "$DIST" && sha256sum -c SHA256SUMS)
+          test "$(dpkg-deb -f "$PACKAGE" Package)" = linux-image-6.1.0-52-rt-amd64
+          test "$(dpkg-deb -f "$PACKAGE" Version)" = 6.1.180-1+d6301
+          grep -qx 'Kernel release: 6.1.0-52-rt-amd64' "$DIST/BUILD-REPORT.txt"
+          awk -F '\t' '$1=="PREEMPT_RT" && $3=="y" {found=1} END {exit !found}' \
+            "$GITHUB_WORKSPACE/audit/amd64-rt/d630-config-symbol-audit.tsv"
+
+      - name: Upload packages, firmware, logs and audit (fail if absent)
+        uses: actions/upload-artifact@v4
+        with:
+          name: d630-kernel-6.1.180-amd64-rt
+          path: |
+            dist/amd64-rt/*
+            audit/amd64-rt/*
+            build-amd64-rt.log
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+      - name: Publish packages and audit to unique pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          DIST="$GITHUB_WORKSPACE/dist/amd64-rt"
+          TAG="d630-kernel-6.1.180-amd64-rt-$GITHUB_RUN_ID"
+          gh release create "$TAG" "$DIST"/* --repo "$GITHUB_REPOSITORY" \
+            --title "D630 stripped Debian 12 kernel 6.1.180-1 (amd64-rt)" \
+            --notes-file "$DIST/RELEASE-NOTES.md" --prerelease
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,name,assets

@@ -1,43 +1,44 @@
-# Dell Latitude D630 — Debian 12 kernel workbench
+# Dell Latitude D630 — Debian 12 stripped kernel workbench
 
-Target: Debian 12 (Bookworm), amd64, Dell Latitude D630 / Intel Core 2 Duo T7250 / Intel GM965 GMA X3100 / Intel PRO/Wireless 3945ABG, legacy BIOS.
+This repository builds two compact kernels from the **exact Debian Bookworm Linux source package 6.1.180-1** that corresponds to the previously working stock image ABI:
 
-## Source and package
+- Normal: `linux-image-6.1.0-52-amd64`, kernel release `6.1.0-52-amd64`.
+- PREEMPT_RT: `linux-image-6.1.0-52-rt-amd64`, kernel release `6.1.0-52-rt-amd64`.
 
-The kernel is built from Debian's native linux source package version 6.1.187-1, using Debian's patches, amd64 configuration and packaging rules. It does not start from upstream x86_64_defconfig, and does not blanket-convert modules from m to n.
+The custom binary package version is `6.1.180-1+d6301`. The package name and `/lib/modules` release match Debian's respective ABI so the image can replace the corresponding stock kernel package. The image is custom and unsigned by Debian's kernel signing keys. The target is this legacy-BIOS Dell Latitude D630 / Core 2 Duo T7250, not the GitHub runner.
 
-- Kernel release: 6.1.187-d630-core2
-- Runtime package: linux-image-6.1.187-d630-core2
-- Architecture: amd64
+## Build workflows
 
-## Configuration policy
+Run either workflow from the Actions tab:
 
-The x86-64 processor-family choice is explicitly set to `CONFIG_MCORE2=y` for the Core 2 Duo T7250; `CONFIG_GENERIC_CPU` must be unset. The generated final config is checked for both values.
+- [Build D630 stripped Debian 12 kernel (amd64)](.github/workflows/build-d630-kernel-amd64.yml)
+- [Build D630 stripped Debian 12 kernel (amd64-rt)](.github/workflows/build-d630-kernel-amd64-rt.yml)
 
-The workflow saves Debian's generated amd64 baseline, then applies a D630-specific overlay. An audit artifact contains the effective config diff and per-symbol classification. The job fails on unexplained loss of retained modules.
+Both workflows use Debian's own native image targets and the version-pinned Debian source archives. They verify the exact binary package name/version/kernel-release, module tree, effective configuration, embedded firmware, and checksums before upload. If a package is missing, the workflow fails before artifact upload. Artifacts have distinct per-workflow names, 90-day retention, and are also published to a uniquely tagged GitHub pre-release with the installable packages and audit report.
 
-The sound policy retains the ALSA core, Intel ICH8 HD Audio (snd-hda-intel) and the IDT/Sigmatel codec used by the D630; all other optional sound-card drivers and codec families are disabled and audited. The filesystem policy retains ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, UDF and ISO9660 as disk filesystems, plus essential proc/devpts pseudo-filesystems; unrelated optional filesystem drivers are disabled and audited. The graphics policy retains Intel i915 and its shared DRM dependencies, while disabling unrelated AMD/AMDGPU, Radeon, NVIDIA Nouveau and other vendor GPU drivers. The overlay makes ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, UDF and zram built-in, preserving Debian's default LZO-RLE compressor for zram. ISO9660 remains modular. The PS/2 mouse/touchpad protocol driver (psmouse) remains modular and unloadable. Debian's built-in INPUT_MOUSEDEV and INPUT_MOUSEDEV_PSAUX settings are preserved for GPM's legacy /dev/input/mice interface. DRM, i915 and Intel AGP are held to the exact official Debian reference config values. nftables FIB expression support for IPv4, IPv6 and inet rules stays modular for firewalld. The SCSI policy disables `CONFIG_SCSI_LOWLEVEL` and the PCMCIA host-adapter menu, plus unused enclosure, multipath, transport-attribute, tape/changer, generic pass-through and UFS support; it retains the SCSI core, disk and CD/DVD drivers, libata/AHCI, and USB mass storage. This follows the Linux 6.1.187 Kconfig split between SCSI core/upper-level devices and low-level host adapters ([drivers/scsi/Kconfig](https://github.com/gregkh/linux/blob/v6.1.187/drivers/scsi/Kconfig), [SCSI documentation](https://github.com/gregkh/linux/blob/v6.1.187/Documentation/scsi/scsi.rst)).
+The previous 6.1.187 workbench workflows are retired. Do not use the former `prepare-debian-inputs.yml` or `build-d630-kernel.yml` flow for this target; its configuration/package inputs were version-stale, and it could report a successful artifact upload containing only logs.
 
-A small, explicit set of hardware subsystems is disabled: CAN, ISDN, InfiniBand/RDMA, FireWire, NFC, WiMAX, IEEE 802.15.4/6LoWPAN, USB gadget mode, all NVMe host/fabric/target support, DVB core and digital-TV/radio/SDR/test-media APIs, legacy TV-tuner/capture peripheral drivers and unused legacy videobuf helpers, and MTD. DVB is not built: `CONFIG_DVB_CORE` and `CONFIG_MEDIA_DIGITAL_TV_SUPPORT` are disabled. The V4L2 core, USB webcam support and modern videobuf2 infrastructure remain available. Debug information is disabled through CONFIG_DEBUG_INFO_NONE=y; only the runtime image target is built.
+## D630 hardware/configuration policy
 
-## Built-in Core 2 microcode
+- CPU: `CONFIG_MCORE2=y`, with MSR and CPUID support built in. No `-march=native`; the runner CPU is not the D630.
+- Storage/filesystems: ext4, Btrfs, NTFS3, FAT/MS-DOS/VFAT, exFAT and UDF are built in. ISO9660 remains a module. SquashFS is built in with zlib, LZ4, LZO, XZ and Zstd support.
+- zram: built in, LZ4 default, all compressors provided by Linux 6.1 enabled (LZO-RLE, Zstd, LZ4, LZO, LZ4HC and 842).
+- Wi-Fi: Intel PRO/Wireless 3945ABG (`iwl3945`) remains a module. `iwlwifi-3945-2.ucode` is embedded in the kernel, and the matching Debian `firmware-iwlwifi` package is provided alongside it for future updates.
+- Graphics: retain Debian's generated Intel i915 and Intel AGP settings. GM965/GMA X3100 on this kernel does not require separate DMC/GuC/HuC firmware.
+- Audio: built-in ALSA/HDA core with modular Intel HDA PCI driver and Sigmatel/IDT codec. The Linux 6.1 Kconfig symbol is `SND_HDA_CODEC_SIGMATEL`; the resulting codec module is named `snd-hda-codec-idt`. This codec does not need external firmware.
+- CPU microcode: the T7250 CPUID 0x000006fd blob `intel-ucode/06-0f-0d` is embedded in both kernels, validated during the build, and accompanied by license/copyright notices. The official `intel-microcode` package is included too.
+- Input: PS/2 touchpad protocol driver (`psmouse`) remains modular/unloadable; the legacy `/dev/input/mice` interface for GPM is preserved.
+- Firewall: preserve Debian's nftables FIB/IPv4/IPv6/inet support at its baseline values.
+- Pruning: disable unrelated sound codecs, filesystem implementations, vendor GPU families, DVB/radio/SDR/test-media APIs, unused SCSI host adapters/transports, NVMe, and unsupported bus/protocol families without blanket-disabling all modules.
 
-The workflow downloads Debian Bookworm's intel-microcode package, validates the 06-0f-0d blob for T7250 CPUID signature 0x000006fd, stages it under /lib/firmware/intel-ucode/06-0f-0d and compiles it into the kernel for early loading. Intel's microcode license and copyright notice are included in the image package documentation and release sidecars. Updating the microcode requires rebuilding the kernel.
+## Build and audit design
 
-The Intel PRO/Wireless 3945ABG firmware remains separate from the kernel microcode. Install the appropriate Debian firmware-iwlwifi package if the machine needs that firmware.
+`config/d630-core2-6.1.180.config` is an overlay, not a replacement for Debian's config. The scripts preserve the generated configuration for the selected feature set, append the D630 overlay to only that image target, run `olddefconfig`, then audit the effective result. They do not rewrite the upstream Makefile version, Debian ABI name or `LOCALVERSION`.
 
-## Workflows and artifacts
+The audit checks the requested Core 2 target, built-in filesystems/compressors, zram defaults, firmware paths, sound/Wi-Fi module settings, RT flavour, and critical i915/storage/netfilter values. It records the full config diff and symbol-by-symbol changes, including any remaining module transitions that need review.
 
-- Prepare Debian inputs: downloads the signed Debian source archives, official reference image/config packages, microcode, licenses and audit metadata. Source files and .deb inputs are retained as an Actions artifact, not committed into Git.
-- Build D630 kernel: builds the amd64 runtime image using Debian's native binary-arch_amd64_none_amd64_real_image target, verifies the exact release and final config, checks the built-in microcode bytes, and uploads the image .deb with the audit and checksums.
+## Installing
 
-The build workflow runs for relevant changes on main or can be started from GitHub Actions with workflow_dispatch. Download the generated package directly from the build run's Artifacts section. Debug and development packages are not built or published.
+Download the workflow artifact or the matching pre-release assets. Review `RELEASE-NOTES.md`, `D630-CONFIG-DIFF.txt`, `D630-CONFIG-AUDIT.tsv` and `SHA256SUMS` before installation. The `firmware-iwlwifi` and `intel-microcode` Debian packages are included alongside the image package.
 
-GitHub-hosted CI cannot test a boot on the physical D630. Treat a successful build as package/config validation, not proof of hardware boot. Test storage, PS/2 touchpad, Intel graphics, wireless firmware and firewalld/nftables FIB rules after installing on the target machine.
-
-## Provenance
-
-- Debian linux source package: https://packages.debian.org/bookworm/source/linux
-- Official reference image: https://packages.debian.org/bookworm/linux-image-6.1.0-53-amd64
-- Official config package: https://packages.debian.org/bookworm/linux-config-6.1
-- Intel microcode package: https://packages.debian.org/bookworm/intel-microcode
+Keep a known-good kernel and initramfs boot entry until the new image has booted on the physical D630. Debian-hosted CI can validate the build, package contents and config, but cannot prove physical boot, Wi-Fi, graphics, audio, touchpad or firewalld behaviour.
