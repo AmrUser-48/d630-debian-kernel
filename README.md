@@ -1,15 +1,15 @@
 # Dell Latitude D630 — Debian Core 2 kernel
 
-Build an installable Debian kernel package for the Dell Latitude D630 and Intel Core 2 Duo T7250 using Debian Bookworm's patched Linux source package `6.1.190-1`.
+Build an installable Debian kernel package for the Dell Latitude D630 and Intel Core 2 Duo T7250 using Debian Bookworm's patched Linux source package `6.1.180-1`.
 
 ## Target
 
 | Property | Value |
 |---|---|
-| Debian source package | `linux=6.1.190-1` |
-| Kernel release / module directory | `6.1.190-d630-core2` |
-| Installable package | `linux-image-6.1.190-d630-core2` |
-| Binary package version | `6.1.190-1+d6301` |
+| Debian source package | `linux=6.1.180-1` |
+| Kernel release / module directory | `6.1.180-d630-core2` |
+| Installable package | `linux-image-6.1.180-d630-core2` |
+| Binary package version | `6.1.180-1+d6301` |
 | CPU target | `CONFIG_MCORE2=y`, `CONFIG_GENERIC_CPU=n` |
 
 The workflow is **D630 Debian Core 2 Kernel — Build, Audit & Release**. It builds one standard amd64 kernel, not a real-time variant.
@@ -24,7 +24,7 @@ The pruning policy disables unrelated GPU vendors, NVMe, unused SCSI adapters/tr
 
 ## Build and release gates
 
-The workflow builds in Debian Bookworm using Debian's native source-package setup and amd64 runtime image target. It pins source `6.1.190-1` and requires the custom kernel release `6.1.190-d630-core2`. It checks the generated release before compiling, then verifies the effective configuration, Kconfig warnings, required modules, embedded firmware, package metadata, boot image path, module directory and checksums.
+The workflow builds in Debian Bookworm using Debian's native source-package setup and amd64 runtime image target. It pins source `6.1.180-1` and requires the custom kernel release `6.1.180-d630-core2`. It checks the generated release before compiling, then verifies the effective configuration, Kconfig warnings, required modules, embedded firmware, package metadata, boot image path, module directory and checksums.
 
 Artifacts and the uniquely tagged GitHub pre-release are published only after validation succeeds. Diagnostics and configuration audits are uploaded when the build fails.
 
@@ -41,4 +41,4 @@ Artifacts and the uniquely tagged GitHub pre-release are published only after va
 
 The package is custom and unsigned by Debian's kernel signing key. Keep a known-good kernel and initramfs entry, then test boot, storage, i915, Wi-Fi, audio, touchpad, CPU frequency scaling and nftables/firewalld on the physical laptop.
 
-Debian will not deliver prebuilt updates for this custom image. Rebuild from each chosen security source release. Debian Bookworm security currently offers `6.1.190-1`; update the source version and official ABI together for a later release.
+Debian will not deliver prebuilt updates for this custom image. Keep the known-good kernel and initramfs until the custom kernel is boot-tested. This repository deliberately pins the requested historical source release `6.1.180-1` and matching Debian ABI `6.1.0-52`; do not silently switch kernel versions. Any later security update must be explicitly selected and must update the source version and Debian ABI together.

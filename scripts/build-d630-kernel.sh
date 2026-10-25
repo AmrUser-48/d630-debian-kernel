@@ -3,16 +3,16 @@ set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "$0")/.." && pwd)"
 BUILD_VARIANT="${BUILD_VARIANT:-amd64}"
-SOURCE_VERSION="${SOURCE_VERSION:-6.1.190-1}"
+SOURCE_VERSION="${SOURCE_VERSION:-6.1.180-1}"
 BUILD_JOBS="${BUILD_JOBS:-2}"
 case "$BUILD_VARIANT" in
   amd64)
     FEATURESET=none
-    DEBIAN_ABI=6.1.0-54
+    DEBIAN_ABI=6.1.0-52
     DEBIAN_PACKAGE="linux-image-${DEBIAN_ABI}-amd64-unsigned"
     DEBIAN_RELEASE="${DEBIAN_ABI}-amd64"
-    EXPECTED_RELEASE=6.1.190-d630-core2
-    EXPECTED_PACKAGE=linux-image-6.1.190-d630-core2
+    EXPECTED_RELEASE=6.1.180-d630-core2
+    EXPECTED_PACKAGE=linux-image-6.1.180-d630-core2
     SETUP_TARGET=setup_amd64_none_amd64_real_image
     BUILD_TARGET=binary-arch_amd64_none_amd64_real_image
     ;;
@@ -21,8 +21,8 @@ case "$BUILD_VARIANT" in
     exit 2
     ;;
 esac
-[[ "$SOURCE_VERSION" == "6.1.190-1" ]] || {
-  echo "This workflow is pinned to Debian linux source 6.1.190-1." >&2
+[[ "$SOURCE_VERSION" == "6.1.180-1" ]] || {
+  echo "This workflow is pinned to Debian linux source 6.1.180-1." >&2
   exit 2
 }
 
@@ -73,12 +73,12 @@ apt-get install -y --no-install-recommends \
   ca-certificates curl dpkg-dev iucode-tool
 apt-get clean
 
-echo "=== Download the exact Debian linux 6.1.190-1 source archives ==="
-for file in linux_6.1.190-1.dsc linux_6.1.190.orig.tar.xz linux_6.1.190-1.debian.tar.xz; do
+echo "=== Download the exact Debian linux 6.1.180-1 source archives ==="
+for file in linux_6.1.180-1.dsc linux_6.1.180.orig.tar.xz linux_6.1.180-1.debian.tar.xz; do
   curl --fail --location --retry 3 --retry-delay 2 "$SOURCE_BASE/$file" -o "$INPUTS/source/$file"
   test -s "$INPUTS/source/$file"
 done
-dpkg-source -x "$INPUTS/source/linux_6.1.190-1.dsc" "$SOURCE" \
+dpkg-source -x "$INPUTS/source/linux_6.1.180-1.dsc" "$SOURCE" \
   > "$AUDIT/source-extraction.log" 2>&1
 ACTUAL_SOURCE_VERSION="$(dpkg-parsechangelog -l "$SOURCE/debian/changelog" -S Version)"
 test "$ACTUAL_SOURCE_VERSION" = "$SOURCE_VERSION" || {
@@ -201,7 +201,7 @@ python3 "$ROOT/scripts/audit-d630.py" \
   "$SOURCE/debian/config/d630-core2.config" "$AUDIT" "$BUILD_VARIANT"
 # Debian's rules.gen applies KERNELRELEASE through .kernelvariables. A bare
 # Kbuild "make kernelrelease" does not load Debian's packaging override and can
-# report upstream 6.1.190 even when the native image build correctly uses the
+# report upstream 6.1.180 even when the native image build correctly uses the
 # custom release. Verify the authoritative Debian override and its build outputs.
 ACTUAL_KRELEASE="$(sed -n 's/^override KERNELRELEASE = //p' "$BUILD/.kernelvariables" | tail -n 1)"
 test "$ACTUAL_KRELEASE" = "$EXPECTED_RELEASE" || {
@@ -280,7 +280,7 @@ set_field("Package", new)
 set_field("Version", version)
 set_field(
     "Description",
-    f"Stripped Debian 12 Linux kernel image for Dell Latitude D630 / Intel Core 2 ({variant}); custom unsigned build from linux 6.1.190-1.",
+    f"Stripped Debian 12 Linux kernel image for Dell Latitude D630 / Intel Core 2 ({variant}); custom unsigned build from linux 6.1.180-1.",
 )
 # Remove self-conflicting clauses from the Debian unsigned/signed transition.
 for field in ("Conflicts", "Breaks", "Replaces"):

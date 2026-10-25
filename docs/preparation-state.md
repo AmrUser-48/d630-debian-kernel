@@ -1,6 +1,6 @@
 # Build state — D630 Debian Core 2 kernel
 
-Approved target: Debian Bookworm security source package `linux=6.1.190-1`, custom kernel release `6.1.190-d630-core2`, binary package `linux-image-6.1.190-d630-core2`.
+Approved target: Debian Bookworm security source package `linux=6.1.180-1`, custom kernel release `6.1.180-d630-core2`, binary package `linux-image-6.1.180-d630-core2`.
 
 The single GitHub Actions workflow uses Debian's native amd64 runtime image setup/build targets. It applies the D630 configuration, confirms `CONFIG_MCORE2=y`, checks the userspace CPU-frequency governor and ACPI P-state driver, records deliberate module pruning, audits the effective configuration, validates firmware and package contents, and only then publishes the installable package.
 

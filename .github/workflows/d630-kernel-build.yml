@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 360
     env:
       BUILD_VARIANT: "amd64"
-      SOURCE_VERSION: "6.1.190-1"
+      SOURCE_VERSION: "6.1.180-1"
       BUILD_JOBS: "2"
     defaults:
       run:
@@ -118,12 +118,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           DIST="$GITHUB_WORKSPACE/dist/$BUILD_VARIANT"
-          TAG="d630-debian-6.1.190-core2-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          TAG="d630-debian-6.1.180-core2-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           test -s "$DIST/RELEASE-NOTES.md"
           gh release create "$TAG" "$DIST"/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Debian 12 Core 2 kernel 6.1.190-d630-core2" \
+            --title "Debian 12 Core 2 kernel 6.1.180-d630-core2" \
             --notes-file "$DIST/RELEASE-NOTES.md" \
             --prerelease
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,name,assets

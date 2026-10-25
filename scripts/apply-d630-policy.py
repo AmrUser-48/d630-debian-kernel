@@ -205,7 +205,7 @@ with (audit / "policy-disabled-symbols.tsv").open("w", encoding="utf-8") as out:
 # The setup and build must agree on the custom ABI/localversion to guarantee
 # the kernel release, boot image path, and modules directory all match.
 rules_before = rules_path.read_text(encoding="utf-8")
-custom_abi = "6.1.190"
+custom_abi = "6.1.180"
 custom_localversion = "-d630-core2"
 custom_release = custom_abi + custom_localversion
 config_rel = "debian/config/d630-core2.config"
@@ -255,7 +255,7 @@ rules_path.write_text(rules_after, encoding="utf-8")
 (audit / "rules.gen.diff").write_text(
     "\n".join(
         ["# Custom release applied to this Debian image target only",
-         "# Setup and build release: 6.1.190-d630-core2."]
+         "# Setup and build release: 6.1.180-d630-core2."]
         + [line.rstrip("\n") for line in __import__("difflib").unified_diff(
             rules_before.splitlines(), rules_after.splitlines(),
             fromfile="rules.gen.before", tofile="rules.gen.after")]

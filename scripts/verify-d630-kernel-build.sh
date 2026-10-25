@@ -6,8 +6,8 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 VARIANT="${1:-${BUILD_VARIANT:-}}"
 case "$VARIANT" in
   amd64)
-    EXPECTED_PACKAGE=linux-image-6.1.190-d630-core2
-    EXPECTED_RELEASE=6.1.190-d630-core2
+    EXPECTED_PACKAGE=linux-image-6.1.180-d630-core2
+    EXPECTED_RELEASE=6.1.180-d630-core2
     EXPECTED_RT=n
     ;;
   *)
@@ -18,7 +18,7 @@ esac
 
 DIST="$ROOT/dist/$VARIANT"
 AUDIT="$ROOT/audit/$VARIANT"
-PACKAGE="$DIST/${EXPECTED_PACKAGE}_6.1.190-1+d6301_amd64.deb"
+PACKAGE="$DIST/${EXPECTED_PACKAGE}_6.1.180-1+d6301_amd64.deb"
 FINAL_CONFIG="$AUDIT/d630-final.config"
 
 fail() {
@@ -69,7 +69,7 @@ require_file "$AUDIT/native-image-build.log"
 
 echo "=== Verify Debian package identity ==="
 [[ "$(dpkg-deb -f "$PACKAGE" Package)" == "$EXPECTED_PACKAGE" ]] || fail "unexpected package name"
-[[ "$(dpkg-deb -f "$PACKAGE" Version)" == "6.1.190-1+d6301" ]] || fail "unexpected package version"
+[[ "$(dpkg-deb -f "$PACKAGE" Version)" == "6.1.180-1+d6301" ]] || fail "unexpected package version"
 [[ "$(dpkg-deb -f "$PACKAGE" Architecture)" == "amd64" ]] || fail "unexpected package architecture"
 grep -Fqx "Kernel release: $EXPECTED_RELEASE" "$DIST/BUILD-REPORT.txt" || fail "build report has the wrong kernel release"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit the effective Debian 6.1.190 D630 kernel config and report all deltas."""
+"""Audit the effective Debian 6.1.180 D630 kernel config and report all deltas."""
 from __future__ import annotations
 
 from pathlib import Path
