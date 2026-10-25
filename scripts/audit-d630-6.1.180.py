@@ -76,6 +76,7 @@ preserve = (
     "BLK_DEV_SD", "BLK_DEV_SR", "USB_STORAGE", "ATA", "SATA_AHCI", "ATA_PIIX",
     "NF_TABLES", "NETFILTER", "NFT_FIB_INET", "NFT_FIB_IPV4", "NFT_FIB_IPV6",
     "INPUT_MOUSEDEV", "INPUT_MOUSEDEV_PSAUX",
+    "EFI", "EFI_STUB", "EFI_MIXED", "LOCK_DOWN_IN_EFI_SECURE_BOOT",
 )
 for symbol in preserve:
     old, new = val(base, symbol), val(final, symbol)
