@@ -84,7 +84,12 @@ require_config GENERIC_CPU n
 require_config SOUND y
 require_config SND y
 require_config SND_PCI y
-require_config SND_HDA y
+require_config SND_HDA m
+require_config SND_PCM_TIMER y
+require_config SND_TIMER m
+require_config SND_HDA_CORE m
+require_config SND_HDA_GENERIC m
+require_config SND_PCM m
 require_config SND_HDA_INTEL m
 require_config SND_HDA_CODEC_SIGMATEL m
 require_config ZRAM y
@@ -105,7 +110,7 @@ if grep -Eiq 'warning: override:|changes choice state' \
   "$AUDIT/kconfig-olddefconfig.log" "$AUDIT/native-image-build.log"; then
   fail "Kconfig override/choice warnings remain in configuration or build logs"
 fi
-grep -Fqx 'CONFIG_SND_HDA=y' "$FINAL_CONFIG" || fail "HDA core is not built in"
+grep -Fqx 'CONFIG_SND_HDA=m' "$FINAL_CONFIG" || fail "HDA core must remain modular with the modular Intel HDA controller"
 grep -Fqx 'CONFIG_SND_PCI=y' "$FINAL_CONFIG" || fail "ALSA PCI core is not built in"
 grep -Fqx 'CONFIG_SND_HDA_INTEL=m' "$FINAL_CONFIG" || fail "Intel HDA driver is not modular"
 grep -Fqx 'CONFIG_SND_HDA_CODEC_SIGMATEL=m' "$FINAL_CONFIG" || fail "Sigmatel codec is not modular"

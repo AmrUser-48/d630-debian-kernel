@@ -30,11 +30,11 @@ baseline = read_config(baseline_path)
 symbols = set(baseline)
 overlay_text = overlay.read_text(encoding="utf-8").rstrip()
 
-# Only retain the D630's actual Intel HDA/Sigmatel audio path. SND_HDA must be
-# built in for the 6.1 Sigmatel codec's Kconfig dependency; the PCI driver and
-# codec remain ordinary loadable modules.
+# Retain only the D630's Intel HDA/Sigmatel path. SND_HDA is an invisible
+# tristate selected by SND_HDA_INTEL; a modular controller resolves the core
+# to m. SND_PCM_TIMER is explicitly retained for normal ALSA PCM timing.
 sound_keep = {
-    "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA",
+    "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA",
     # SND_PCI gates the PCI sound-driver Kconfig menu, including Intel HDA, in Linux 6.1.
     "SND_PCI", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE",
     "SND_HDA_COMPONENT", "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS",
@@ -46,7 +46,7 @@ if not required_sound_keep.issubset(sound_keep):
     raise SystemExit("Audio policy is missing required HDA dependencies: " + ", ".join(sorted(required_sound_keep - sound_keep)))
 
 sound_disabled = sorted(
-    s for s in symbols if s.startswith("SND_") and s not in sound_keep
+    s for s in symbols if s.startswith(("SND_", "SOUNDWIRE_")) and s not in sound_keep
     and baseline.get(s, "n") in {"y", "m"}
 )
 
@@ -95,7 +95,8 @@ gpu_disabled = sorted(
 parent_disable = {
     "CAN": ("CAN_", "NET_EMATCH_CANID"),
     "ISDN": ("MISDN", "BT_CMTP", "ISDN"),
-    "INFINIBAND": ("INFINIBAND", "RDMA", "MLX4_INFINIBAND", "MLX5_INFINIBAND"),
+    "INFINIBAND": ("INFINIBAND", "RDMA", "MLX4_INFINIBAND", "MLX5_INFINIBAND",
+                    "RDS_RDMA", "SUNRPC_XPRT_RDMA", "NET_9P_RDMA"),
     "FIREWIRE": ("FIREWIRE", "SBP_TARGET", "SND_FIREWIRE", "SND_FIREWORKS",
                  "SND_BEBOB", "SND_DICE", "SND_FIREFACE", "SND_ISIGHT", "SND_OXFW"),
     "NFC": ("NFC",),
@@ -103,7 +104,8 @@ parent_disable = {
     "IEEE802154": ("IEEE802154", "MAC802154"),
     "6LOWPAN": ("6LOWPAN", "BT_6LOWPAN"),
     "USB_GADGET": ("USB_GADGET", "USBIP_VUDC", "USB_DUMMY_HCD", "USB_FUNCTIONFS",
-                   "USB_LIBCOMPOSITE", "USB_CONFIGFS", "USB_F_", "USB_U_"),
+                   "USB_LIBCOMPOSITE", "USB_CONFIGFS", "USB_F_", "USB_U_",
+                   "USB_ETH", "USB_G_SERIAL"),
     "BLK_DEV_NVME": ("NVME", "BLK_DEV_NVME"),
     "MEDIA_DIGITAL_TV_SUPPORT": ("DVB", "MANTIS_CORE", "MEDIA_ALTERA_CI",
                                  "SMS_SDIO_DRV", "SMS_SIANO_MDTV", "SMS_USB_DRV",
@@ -122,11 +124,15 @@ parent_disable = {
                       "A2091_SCSI", "GVP11_SCSI", "ATARI_SCSI", "MAC_SCSI",
                       "MVME147_SCSI", "MVME16", "BVME6000_SCSI", "SUN3_SCSI",
                       "SUN3X_ESP", "JAZZ_ESP", "QEDI", "BE2ISCSI", "MEGARAID_",
-                      "LIBCXGBI", "CXGB"),
+                      "LIBCXGBI", "CXGB", "ENCLOSURE_SERVICES", "RAID_ATTRS",
+                      "CHR_DEV_", "FUSION_", "QEDF", "TCM_", "PCMCIA_AHA152X",
+                      "PCMCIA_QLOGIC", "PCMCIA_SYM53C500"),
     "MTD": ("MTD", "FTL", "INFTL", "NFTL", "RFD_FTL", "SSFDC", "JFFS2_FS",
             "UBIFS_FS", "BCH"),
-    "XEN": ("XEN",),
-    "VIRTIO": ("VIRTIO_",),
+    "XEN": ("XEN", "TCG_XEN", "NET_9P_XEN"),
+    "VIRTIO": ("VIRTIO_", "HW_RANDOM_VIRTIO", "CRYPTO_DEV_VIRTIO", "NET_9P_VIRTIO"),
+    "EFI": ("EFI_",),
+    "NFS_FS": ("NFS_", "SUNRPC", "LOCKD"),
 }
 parent_values = read_config(overlay)
 child_disabled: list[str] = []
@@ -146,7 +152,7 @@ for parent, prefixes in parent_disable.items():
 all_disabled = sorted(set(sound_disabled + filesystem_disabled + gpu_disabled + child_disabled))
 generated = overlay_text + "\n"
 generated += f"\n# Variant-specific scheduling policy: Debian RT featureset={featureset}.\n"
-generated += "CONFIG_PREEMPT_RT=y\n" if featureset == "rt" else "# CONFIG_PREEMPT_RT is not set\n"
+generated += "CONFIG_EXPERT=y\nCONFIG_PREEMPT_RT=y\n" if featureset == "rt" else "# CONFIG_PREEMPT_RT is not set\n"
 generated += "\n# D630 audio trim: keep HDA + Sigmatel, disable other sound devices.\n"
 generated += "".join(f"# CONFIG_{s} is not set\n" for s in sound_disabled)
 generated += "\n# D630 filesystem trim: disable unneeded filesystem implementations.\n"
@@ -168,14 +174,20 @@ target_config.write_text(generated, encoding="utf-8")
     encoding="utf-8",
 )
 
+policy_reasons: dict[str, str] = {}
+for group, values in (
+    ("unused sound", sound_disabled), ("unused filesystem", filesystem_disabled),
+    ("unrelated GPU", gpu_disabled), ("disabled parent dependency", sorted(set(child_disabled))),
+):
+    for symbol in values:
+        policy_reasons.setdefault(symbol, group)
+for symbol, value in parse_config_text(generated).items():
+    if value == "n":
+        policy_reasons.setdefault(symbol, "explicit D630 Kconfig policy")
 with (audit / "policy-disabled-symbols.tsv").open("w", encoding="utf-8") as out:
     out.write("symbol\tpolicy\n")
-    for group, values in (
-        ("unused sound", sound_disabled), ("unused filesystem", filesystem_disabled),
-        ("unrelated GPU", gpu_disabled), ("disabled parent dependency", sorted(set(child_disabled))),
-    ):
-        for symbol in values:
-            out.write(f"{symbol}\t{group}\n")
+    for symbol, group in sorted(policy_reasons.items()):
+        out.write(f"{symbol}\t{group}\n")
 
 # Patch only the selected Debian native image target's KCONFIG chain. Do not
 # alter the upstream version, ABI name, LOCALVERSION, or Makefile: Debian itself

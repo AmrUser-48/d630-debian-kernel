@@ -306,6 +306,10 @@ require_module() {
   fi
 }
 require_module iwl3945 IWL3945
+require_module snd-timer SND_TIMER
+require_module snd-hda-core SND_HDA_CORE
+require_module snd-hda-codec SND_HDA
+require_module snd-hda-codec-generic SND_HDA_GENERIC
 require_module snd-hda-intel SND_HDA_INTEL
 require_module snd-hda-codec-idt SND_HDA_CODEC_SIGMATEL
 require_module psmouse MOUSE_PS2
