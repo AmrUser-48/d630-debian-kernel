@@ -199,12 +199,27 @@ cp "$BUILD/.config" "$AUDIT/d630-final.config"
 python3 "$ROOT/scripts/audit-d630.py" \
   "$AUDIT/debian-baseline.config" "$BUILD/.config" \
   "$SOURCE/debian/config/d630-core2.config" "$AUDIT" "$BUILD_VARIANT"
-# LOCALVERSION is a make-time input, not persisted in .config. Match Debian's image build recipe.
-ACTUAL_KRELEASE="$(runuser -u builder -- make -s -C "$KCONFIG_SOURCE" O="$BUILD" LOCALVERSION=-d630-core2 kernelrelease)"
+# Debian's rules.gen applies KERNELRELEASE through .kernelvariables. A bare
+# Kbuild "make kernelrelease" does not load Debian's packaging override and can
+# report upstream 6.1.190 even when the native image build correctly uses the
+# custom release. Verify the authoritative Debian override and its build outputs.
+ACTUAL_KRELEASE="$(sed -n 's/^override KERNELRELEASE = //p' "$BUILD/.kernelvariables" | tail -n 1)"
 test "$ACTUAL_KRELEASE" = "$EXPECTED_RELEASE" || {
-  echo "FAIL: built kernelrelease=$ACTUAL_KRELEASE; expected $EXPECTED_RELEASE." >&2
+  echo "FAIL: Debian .kernelvariables has KERNELRELEASE=$ACTUAL_KRELEASE; expected $EXPECTED_RELEASE." >&2
   exit 1
 }
+IMAGE_STAGE="$SOURCE/debian/$DEBIAN_PACKAGE"
+test -s "$IMAGE_STAGE/boot/vmlinuz-$EXPECTED_RELEASE" || {
+  echo "FAIL: native Debian image build did not stage vmlinuz-$EXPECTED_RELEASE." >&2
+  find "$IMAGE_STAGE/boot" -maxdepth 1 -type f -printf '%f\n' >&2 || true
+  exit 1
+}
+test -d "$IMAGE_STAGE/lib/modules/$EXPECTED_RELEASE" || {
+  echo "FAIL: native Debian image build did not stage modules for $EXPECTED_RELEASE." >&2
+  find "$IMAGE_STAGE/lib/modules" -maxdepth 2 -type d -print >&2 || true
+  exit 1
+}
+echo "PASS: Debian image staging uses KERNELRELEASE=$ACTUAL_KRELEASE."
 test -s "$BUILD/vmlinux" || {
   find "$SOURCE/debian/build" -maxdepth 5 -type f -name vmlinux -print >&2 || true
   echo "Uncompressed vmlinux missing after native build" >&2
