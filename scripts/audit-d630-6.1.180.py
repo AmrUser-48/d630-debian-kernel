@@ -51,7 +51,9 @@ required = {
     "NLS": "y", "NLS_UTF8": "y", "NLS_CODEPAGE_437": "y",
     "WLAN": "y", "CFG80211": "m", "MAC80211": "m", "RFKILL": "y",
     "IWLEGACY": "m", "IWL3945": "m",
-    "SOUND": "y", "SND": "y", "SND_PCI": "y", "SND_HDA": "y",
+    "SOUND": "y", "SND": "y", "SND_PCI": "y", "SND_HDA": "m",
+    "SND_PCM_TIMER": "y", "SND_TIMER": "m", "SND_HDA_CORE": "m",
+    "SND_HDA_GENERIC": "m", "SND_PCM": "m",
     "SND_HDA_INTEL": "m", "SND_HDA_CODEC_SIGMATEL": "m",
     "DVB_CORE": "n", "MEDIA_DIGITAL_TV_SUPPORT": "n",
     "MEDIA_RADIO_SUPPORT": "n", "MEDIA_SDR_SUPPORT": "n", "MEDIA_TEST_SUPPORT": "n",
@@ -60,6 +62,8 @@ required = {
     "USB_GADGET": "n", "MTD": "n", "BLK_DEV_NVME": "n", "SCSI_LOWLEVEL": "n",
 }
 required["PREEMPT_RT"] = "y" if variant == "amd64-rt" else "n"
+if variant == "amd64-rt":
+    required["EXPERT"] = "y"
 for symbol, expected in required.items():
     actual = val(final, symbol)
     if actual != expected:
@@ -90,7 +94,7 @@ if policy_file.is_file():
             policy_symbols.add(line.split("\t", 1)[0])
 
 sound_keep = {
-    "SND", "SND_TIMER", "SND_PCM", "SND_HWDEP", "SND_HDA", "SND_HDA_INTEL",
+    "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_HDA_INTEL",
     "SND_PCI", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE", "SND_HDA_COMPONENT",
     "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS", "SND_INTEL_DSP_CONFIG",
     "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE", "SND_JACK", "SND_CTL_LED", "SND_VMASTER",
@@ -154,6 +158,11 @@ core_scsi = {
 
 def intentional_drop(symbol: str) -> bool:
     if symbol in policy_symbols:
+        return True
+    # The exact D630 fragment is audited too: if it explicitly disables a
+    # symbol, an m -> n transition is documented policy. Dependency-only drops
+    # still need one of the narrowly defined family/dependency rules below.
+    if overlay.get(symbol) == "n":
         return True
     if symbol.startswith("SND_") and symbol not in sound_keep:
         return True
