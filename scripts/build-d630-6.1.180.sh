@@ -152,7 +152,17 @@ runuser -u builder -- python3 "$ROOT/scripts/apply-d630-6.1.180-policy.py" \
   runuser -u builder -- "$SOURCE/scripts/kconfig/merge_config.sh" -m -O "$BUILD" \
     "$AUDIT/debian-baseline.config" "$SOURCE/debian/config/d630-core2-6.1.180.config"
 ) > "$AUDIT/kconfig-merge.log" 2>&1
-runuser -u builder -- make -C "$SOURCE" O="$BUILD" ARCH=x86 olddefconfig 2>&1 | tee "$AUDIT/kconfig-olddefconfig.log"
+KCONFIG_SOURCE="$SOURCE/debian/build/source_$FEATURESET"
+test -d "$KCONFIG_SOURCE" || {
+  echo "Debian patched Kconfig source tree is missing: $KCONFIG_SOURCE" >&2
+  exit 1
+}
+echo "Using Debian patched Kconfig source tree: $KCONFIG_SOURCE"
+runuser -u builder -- make -C "$KCONFIG_SOURCE" O="$BUILD" olddefconfig 2>&1 | tee "$AUDIT/kconfig-olddefconfig.log"
+if [[ "$FEATURESET" == rt ]] && ! grep -Fqx 'CONFIG_PREEMPT_RT=y' "$BUILD/.config"; then
+  echo "FAIL: Debian's RT featureset lost CONFIG_PREEMPT_RT during olddefconfig." >&2
+  exit 1
+fi
 if grep -Ein 'warning: override:|changes choice state' "$AUDIT/kconfig-olddefconfig.log"; then
   echo "FAIL: Kconfig emitted override warnings during olddefconfig; refusing to compile." >&2
   exit 1
