@@ -131,7 +131,6 @@ parent_disable = {
             "UBIFS_FS", "BCH"),
     "XEN": ("XEN", "TCG_XEN", "NET_9P_XEN"),
     "VIRTIO": ("VIRTIO_", "HW_RANDOM_VIRTIO", "CRYPTO_DEV_VIRTIO", "NET_9P_VIRTIO"),
-    "EFI": ("EFI_",),
     "NFS_FS": ("NFS_", "SUNRPC", "LOCKD"),
 }
 parent_values = read_config(overlay)
