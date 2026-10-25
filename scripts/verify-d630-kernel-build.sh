@@ -6,24 +6,19 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 VARIANT="${1:-${BUILD_VARIANT:-}}"
 case "$VARIANT" in
   amd64)
-    EXPECTED_PACKAGE=linux-image-6.1.0-52-amd64
-    EXPECTED_RELEASE=6.1.0-52-amd64
+    EXPECTED_PACKAGE=linux-image-6.1.190-d630-core2
+    EXPECTED_RELEASE=6.1.190-d630-core2
     EXPECTED_RT=n
     ;;
-  amd64-rt)
-    EXPECTED_PACKAGE=linux-image-6.1.0-52-rt-amd64
-    EXPECTED_RELEASE=6.1.0-52-rt-amd64
-    EXPECTED_RT=y
-    ;;
   *)
-    echo "Usage: $0 {amd64|amd64-rt}" >&2
+    echo "Usage: $0 amd64" >&2
     exit 2
     ;;
 esac
 
 DIST="$ROOT/dist/$VARIANT"
 AUDIT="$ROOT/audit/$VARIANT"
-PACKAGE="$DIST/${EXPECTED_PACKAGE}_6.1.180-1+d6301_amd64.deb"
+PACKAGE="$DIST/${EXPECTED_PACKAGE}_6.1.190-1+d6301_amd64.deb"
 FINAL_CONFIG="$AUDIT/d630-final.config"
 
 fail() {
@@ -74,13 +69,16 @@ require_file "$AUDIT/native-image-build.log"
 
 echo "=== Verify Debian package identity ==="
 [[ "$(dpkg-deb -f "$PACKAGE" Package)" == "$EXPECTED_PACKAGE" ]] || fail "unexpected package name"
-[[ "$(dpkg-deb -f "$PACKAGE" Version)" == "6.1.180-1+d6301" ]] || fail "unexpected package version"
+[[ "$(dpkg-deb -f "$PACKAGE" Version)" == "6.1.190-1+d6301" ]] || fail "unexpected package version"
 [[ "$(dpkg-deb -f "$PACKAGE" Architecture)" == "amd64" ]] || fail "unexpected package architecture"
 grep -Fqx "Kernel release: $EXPECTED_RELEASE" "$DIST/BUILD-REPORT.txt" || fail "build report has the wrong kernel release"
 
 echo "=== Verify effective D630 configuration ==="
 require_config MCORE2 y
 require_config GENERIC_CPU n
+require_config CPU_FREQ y
+require_config CPU_FREQ_GOV_USERSPACE y
+require_config X86_ACPI_CPUFREQ m
 require_config SOUND y
 require_config SND y
 require_config SND_PCI y
@@ -115,7 +113,8 @@ grep -Fqx 'CONFIG_SND_PCI=y' "$FINAL_CONFIG" || fail "ALSA PCI core is not built
 grep -Fqx 'CONFIG_SND_HDA_INTEL=m' "$FINAL_CONFIG" || fail "Intel HDA driver is not modular"
 grep -Fqx 'CONFIG_SND_HDA_CODEC_SIGMATEL=m' "$FINAL_CONFIG" || fail "Sigmatel codec is not modular"
 
-echo "=== Verify module payload and checksums ==="
+echo "=== Verify boot image, module payload and checksums ==="
+dpkg-deb -c "$PACKAGE" | grep -F "/boot/vmlinuz-$EXPECTED_RELEASE" >/dev/null || fail "kernel image for $EXPECTED_RELEASE is absent"
 dpkg-deb -c "$PACKAGE" | grep -F "/lib/modules/$EXPECTED_RELEASE/" >/dev/null || fail "kernel modules for $EXPECTED_RELEASE are absent"
 grep -Fqx "PASS" "$DIST/CONFIG-AUDIT-ERRORS.txt" || fail "release audit error report is not PASS"
 (cd "$DIST" && sha256sum --check SHA256SUMS)

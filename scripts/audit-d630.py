@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit the effective Debian 6.1.180 D630 kernel config and report all deltas."""
+"""Audit the effective Debian 6.1.190 D630 kernel config and report all deltas."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,12 +11,12 @@ from d630_kconfig import read_config
 
 if len(sys.argv) != 6:
     raise SystemExit(
-        "usage: audit-d630-6.1.180.py BASELINE FINAL OVERLAY AUDIT_DIR VARIANT"
+        "usage: audit-d630.py BASELINE FINAL OVERLAY AUDIT_DIR VARIANT"
     )
 baseline_path, final_path, overlay_path, audit_path = map(Path, sys.argv[1:5])
 variant = sys.argv[5]
-if variant not in {"amd64", "amd64-rt"}:
-    raise SystemExit("variant must be amd64 or amd64-rt")
+if variant != "amd64":
+    raise SystemExit("only variant amd64 is supported")
 audit_path.mkdir(parents=True, exist_ok=True)
 baseline_path, final_path = baseline_path.resolve(), final_path.resolve()
 overlay_path = overlay_path.resolve()
@@ -31,6 +31,7 @@ def val(config: dict[str, str], symbol: str) -> str:
 
 required = {
     "MCORE2": "y", "GENERIC_CPU": "n", "X86_MSR": "y", "X86_CPUID": "y",
+    "CPU_FREQ": "y", "CPU_FREQ_GOV_USERSPACE": "y", "X86_ACPI_CPUFREQ": "m",
     "MICROCODE": "y", "MICROCODE_INTEL": "y", "FW_LOADER": "y",
     "EXTRA_FIRMWARE": '"intel-ucode/06-0f-0d iwlwifi-3945-2.ucode"',
     "EXTRA_FIRMWARE_DIR": '"/lib/firmware"',
@@ -61,9 +62,7 @@ required = {
     "NFC": "n", "WIMAX": "n", "IEEE802154": "n", "6LOWPAN": "n",
     "USB_GADGET": "n", "MTD": "n", "BLK_DEV_NVME": "n", "SCSI_LOWLEVEL": "n",
 }
-required["PREEMPT_RT"] = "y" if variant == "amd64-rt" else "n"
-if variant == "amd64-rt":
-    required["EXPERT"] = "y"
+required["PREEMPT_RT"] = "n"
 for symbol, expected in required.items():
     actual = val(final, symbol)
     if actual != expected:
@@ -244,7 +243,7 @@ report = [
     f"Symbols changed: {len(changes)}",
     f"Unclassified Debian m -> n transitions: {len(unexpected_drops)}",
     "Every unclassified Debian m -> n transition is fatal; classify intentional policy changes explicitly.",
-    "Critical checks: Core 2 target, embedded CPU+Wi-Fi firmware, zram compressors, filesystem support, audio, Wi-Fi, PREEMPT_RT flavour, i915 baseline, storage, and nftables baseline.",
+    "Critical checks: Core 2 target, embedded CPU+Wi-Fi firmware, zram compressors, filesystem support, audio, Wi-Fi, CPU-frequency scaling, i915 baseline, storage, and nftables baseline.",
 ]
 (audit_path / "config-audit-summary.txt").write_text("\n".join(report) + "\n", encoding="utf-8")
 (audit_path / "config-audit-errors.txt").write_text(

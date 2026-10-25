@@ -1,15 +1,7 @@
-# Preparation and build state
+# Build state — D630 Debian Core 2 kernel
 
-The input workflow prepares Debian Bookworm source package linux 6.1.187-1, the matching official reference image/config package, and Debian intel-microcode for the Intel Core 2 Duo T7250.
+Approved target: Debian Bookworm security source package `linux=6.1.190-1`, custom kernel release `6.1.190-d630-core2`, binary package `linux-image-6.1.190-d630-core2`.
 
-The build workflow:
-- extracts and validates the pinned Debian source package;
-- runs Debian's amd64 setup target to capture the stock generated config;
-- applies config/d630-core2.config only to the amd64 runtime image target;
-- checks the exact kernel release 6.1.187-d630-core2 before the long compile;
-- builds only the runtime image package, with no debug/development targets;
-- audits effective configuration changes and rejects unexplained Debian module m-to-n conversions;
-- verifies that the Core 2 microcode bytes are built into vmlinux and includes the Intel license/copyright;
-- uploads the installable .deb, checksums, log and complete config/packaging audit.
+The single GitHub Actions workflow uses Debian's native amd64 runtime image setup/build targets. It applies the D630 configuration, confirms `CONFIG_MCORE2=y`, checks the userspace CPU-frequency governor and ACPI P-state driver, records deliberate module pruning, audits the effective configuration, validates firmware and package contents, and only then publishes the installable package.
 
-A successful CI package still requires a real boot test on the target Dell Latitude D630. Debian firmware for the Intel PRO/Wireless 3945ABG is separate from the embedded CPU microcode.
+The custom package is unsigned. CI validates build/configuration/package integrity; boot and hardware functionality still require testing on the Latitude D630. Keep the known-good kernel until that test passes.

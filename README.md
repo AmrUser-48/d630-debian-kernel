@@ -1,62 +1,44 @@
-# Dell Latitude D630 — Debian kernel build
+# Dell Latitude D630 — Debian Core 2 kernel
 
-This repository produces installable Debian 12 kernel packages from Debian's **pinned Linux source package 6.1.180-1** for the Dell Latitude D630 / Intel Core 2 Duo T7250.
+Build an installable Debian kernel package for the Dell Latitude D630 and Intel Core 2 Duo T7250 using Debian Bookworm's patched Linux source package `6.1.190-1`.
 
-| Variant | Debian package | Kernel release |
-|---|---|---|
-| Standard | `linux-image-6.1.0-52-amd64` | `6.1.0-52-amd64` |
-| PREEMPT_RT | `linux-image-6.1.0-52-rt-amd64` | `6.1.0-52-rt-amd64` |
+## Target
 
-The custom binary package version is `6.1.180-1+d6301`. Packages are custom and unsigned by Debian's kernel signing keys. Keep a known-good boot entry until the kernel has been tested on the physical machine.
+| Property | Value |
+|---|---|
+| Debian source package | `linux=6.1.190-1` |
+| Kernel release / module directory | `6.1.190-d630-core2` |
+| Installable package | `linux-image-6.1.190-d630-core2` |
+| Binary package version | `6.1.190-1+d6301` |
+| CPU target | `CONFIG_MCORE2=y`, `CONFIG_GENERIC_CPU=n` |
 
-## Run a build
+The workflow is **D630 Debian Core 2 Kernel — Build, Audit & Release**. It builds one standard amd64 kernel, not a real-time variant.
 
-Use the single **D630 Kernel — Build, Audit & Publish** workflow:
+## Machine-specific configuration
 
-[Open the kernel build workflow](.github/workflows/d630-kernel-build.yml)
+The build starts from Debian's generated amd64 settings, then applies explicit D630 policy. It retains Intel GM965/i915 and AGP, SATA/AHCI and USB storage, ACPI, nftables, ext4, Btrfs, NTFS3, FAT/VFAT/exFAT, UDF, ISO9660 and SquashFS, plus Intel PRO/Wireless 3945ABG, Intel ICH8/Sigmatel HDA and PS/2 input.
 
-On a manual run, select `amd64`, `amd64-rt`, or `both`. A push that changes the workflow, configuration, or build scripts builds both variants. Documentation-only changes do not start a six-hour kernel build.
+CPU scaling is mandatory: `CONFIG_CPU_FREQ=y`, `CONFIG_CPU_FREQ_GOV_USERSPACE=y` and `CONFIG_X86_ACPI_CPUFREQ=m`. zram remains built in with LZ4 as its default compressor. Core 2 microcode and Intel 3945ABG firmware are embedded; the official firmware packages and license/copyright notices are included in the release bundle.
 
-The Actions UI uses one naming scheme:
-- **Workflow:** `D630 Kernel — Build, Audit & Publish`
-- **Run:** variant selection, branch, and run number
-- **Job:** `Build, validate & publish / <variant>`
-- **Steps:** named by operation, such as `Build Debian kernel package / amd64` and `Verify package, configuration & checksums`
+The pruning policy disables unrelated GPU vendors, NVMe, unused SCSI adapters/transports, tuner/DVB/radio/SDR/test-media drivers, unused audio devices and unrelated hardware/protocol modules. Deliberate removals are recorded. Unexplained enabled-module-to-disabled transitions fail validation.
 
-The workflow has separate deliverable and diagnostic artifacts. The **installable package artifact is uploaded only after verification succeeds**, and the pre-release is published only after that upload succeeds. Logs and audit files are uploaded on failures too, without being mislabelled as a successful kernel package.
+## Build and release gates
 
-## Build method
+The workflow builds in Debian Bookworm using Debian's native source-package setup and amd64 runtime image target. It pins source `6.1.190-1` and requires the custom kernel release `6.1.190-d630-core2`. It checks the generated release before compiling, then verifies the effective configuration, Kconfig warnings, required modules, embedded firmware, package metadata, boot image path, module directory and checksums.
 
-The build follows Debian's native kernel packaging rules, not a generic upstream `defconfig` build:
+Artifacts and the uniquely tagged GitHub pre-release are published only after validation succeeds. Diagnostics and configuration audits are uploaded when the build fails.
 
-1. Reclaim unused disk space on the fresh GitHub-hosted runner and report disk use before/after cleanup.
-2. Run Bash/Python syntax checks, Kconfig unit tests, and checksummed actionlint validation of the workflow schema and expressions.
-3. Download the pinned Debian source archive and verify its checksums with `dpkg-source`.
-4. Generate Debian's native configuration for the selected featureset.
-5. Apply the D630 overlay once, normalize repeated Kconfig assignments, and reject contradictory assignments.
-6. Run `olddefconfig`, audit the effective config, and refuse to compile if Kconfig override/choice warnings occur.
-7. Build Debian's native `binary-arch_amd64_none_amd64_real_image` or `binary-arch_amd64_rt_amd64_real_image` target.
-8. Audit the post-build config, firmware blobs, package identity, required module payloads, and SHA-256 checksums.
-9. Upload the verified package and publish its assets to a uniquely tagged pre-release.
+## Files
 
-The workflows use `actions/checkout@v7` and `actions/upload-artifact@v7`. They run the actual Debian build inside `debian:bookworm`; the host runner is used for orchestration, disk management, artifact upload, and release publication. Builds use two jobs in parallel inside the container to limit memory use.
+- `config/d630-core2.config` — Core 2 and D630 Kconfig overlay.
+- `scripts/apply-d630-policy.py` — applies the overlay, records intentional pruning and configures the custom release.
+- `scripts/audit-d630.py` — checks required symbols and classifies configuration changes.
+- `scripts/build-d630-kernel.sh` — downloads and validates Debian source, builds and packages the kernel.
+- `scripts/verify-d630-kernel-build.sh` — package/configuration/firmware/checksum gate.
+- `scripts/d630_kconfig.py` and `scripts/test-d630-kconfig.py` — Kconfig parser and unit tests.
 
-## Configuration and script ownership
+## Installation and updates
 
-- `config/d630-core2-6.1.180.config`: the committed D630 policy overlay on Debian's generated configuration.
-- `scripts/build-d630-6.1.180.sh`: orchestrates source/dependency preparation, native config generation, compilation, firmware checks, and package creation.
-- `scripts/apply-d630-6.1.180-policy.py`: applies hardware-specific pruning and appends the overlay to the selected Debian image target's `KCONFIG` chain. It does not rewrite Debian's kernel ABI or `LOCALVERSION`.
-- `scripts/d630_kconfig.py`: shared config parser and fragment normalizer. Identical repeated assignments are collapsed; contradictory assignments fail closed.
-- `scripts/audit-d630-6.1.180.py`: checks mandatory settings and records the effective diff and symbol classification.
-- `scripts/test-d630-kconfig.py`: fast unit tests for config parsing and normalization.
-- `scripts/verify-d630-6.1.180-build.sh`: final package/config/firmware/checksum gate before a deliverable artifact or release can be created.
+The package is custom and unsigned by Debian's kernel signing key. Keep a known-good kernel and initramfs entry, then test boot, storage, i915, Wi-Fi, audio, touchpad, CPU frequency scaling and nftables/firewalld on the physical laptop.
 
-The build preserves Debian's generated settings for Intel i915/AGP, storage, USB mass storage and nftables, while applying an explicit D630 policy. Important required settings include `CONFIG_MCORE2=y`, built-in ALSA/HDA/ALSA PCI core, modular Intel HDA and Sigmatel codec, modular Intel 3945ABG Wi-Fi, built-in zram with LZ4 as the default, and the requested local filesystems. Unsupported symbols or unmet Kconfig dependencies cause the audit to fail.
-
-## Artifacts and diagnosis
-
-A successful run produces an artifact named like `d630-kernel-amd64-<run-id>-<attempt>` or `d630-kernel-amd64-rt-<run-id>-<attempt>`, containing the installable Debian image, firmware packages, configuration audit, release notes and checksums. Matching uniquely tagged GitHub pre-releases contain the same deliverables.
-
-On failure, open the artifact named `d630-kernel-diagnostics-<variant>-<run-id>-<attempt>`. Start with `build-<variant>.log`, then inspect `audit/<variant>/kconfig-merge.log`, `kconfig-olddefconfig.log`, `native-image-build.log`, `d630-config-symbol-audit.tsv`, `kconfig-fragment-normalization.txt`, and `config-audit-errors.txt`. The installable bundle includes `CONFIG-AUDIT-ERRORS.txt` with an explicit `PASS` status; an unclassified module drop or unresolved Kconfig warning prevents publication.
-
-Hosted CI can verify the source, effective config and package contents. It cannot prove that the kernel boots or that graphics, audio, Wi-Fi, touchpad and firewalld work on the physical D630; test those after installation.
+Debian will not deliver prebuilt updates for this custom image. Rebuild from each chosen security source release. Debian Bookworm security currently offers `6.1.190-1`; update the source version and official ABI together for a later release.

@@ -1,47 +1,31 @@
-name: D630 Kernel — Build, Audit & Publish
-run-name: "D630 kernel / ${{ inputs.variant || 'both variants' }} / ${{ github.ref_name }} / #${{ github.run_number }}"
+name: D630 Debian Core 2 Kernel — Build, Audit & Release
+run-name: "D630 Core 2 kernel / ${{ github.ref_name }} / #${{ github.run_number }}"
 
 on:
   push:
     branches:
       - main
-      - d630-kernel-6.1.180-amd64-rt
     paths:
       - ".github/workflows/**"
-      - "config/d630-core2-6.1.180.config"
+      - "config/d630-core2.config"
       - "scripts/**"
   workflow_dispatch:
-    inputs:
-      variant:
-        description: Kernel variant to build and publish
-        required: true
-        type: choice
-        options:
-          - both
-          - amd64
-          - amd64-rt
-        default: both
 
 permissions:
   contents: write
 
 concurrency:
-  group: d630-kernel-build-${{ github.ref }}
+  group: d630-debian-core2-kernel
   cancel-in-progress: true
 
 jobs:
   build_validate_publish:
-    name: Build, validate & publish / ${{ matrix.variant }}
+    name: Build, validate & publish / amd64
     runs-on: ubuntu-24.04
     timeout-minutes: 360
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        variant: ${{ fromJSON(inputs.variant == 'amd64' && '["amd64"]' || inputs.variant == 'amd64-rt' && '["amd64-rt"]' || '["amd64","amd64-rt"]') }}
     env:
-      BUILD_VARIANT: ${{ matrix.variant }}
-      SOURCE_VERSION: "6.1.180-1"
+      BUILD_VARIANT: "amd64"
+      SOURCE_VERSION: "6.1.190-1"
       BUILD_JOBS: "2"
     defaults:
       run:
@@ -53,7 +37,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Initialize per-variant diagnostic log
+      - name: Initialize diagnostic log
         run: |
           set -Eeuo pipefail
           {
@@ -61,7 +45,7 @@ jobs:
             echo "Run ID: $GITHUB_RUN_ID / attempt $GITHUB_RUN_ATTEMPT"
             echo "Commit: $GITHUB_SHA"
             echo "Branch: $GITHUB_REF_NAME"
-            echo "Variant: $BUILD_VARIANT"
+            echo "Build target: standard amd64"
             echo "Source package: linux=$SOURCE_VERSION"
             echo "Started at UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           } > "build-$BUILD_VARIANT.log"
@@ -90,12 +74,12 @@ jobs:
         run: |
           set -Eeuo pipefail
           exec > >(tee -a "build-$BUILD_VARIANT.log") 2>&1
-          bash -n scripts/build-d630-6.1.180.sh
-          bash -n scripts/verify-d630-6.1.180-build.sh
+          bash -n scripts/build-d630-kernel.sh
+          bash -n scripts/verify-d630-kernel-build.sh
           python3 -m py_compile \
             scripts/d630_kconfig.py \
-            scripts/apply-d630-6.1.180-policy.py \
-            scripts/audit-d630-6.1.180.py \
+            scripts/apply-d630-policy.py \
+            scripts/audit-d630.py \
             scripts/test-d630-kconfig.py
           python3 scripts/test-d630-kconfig.py
           curl --fail --location --retry 3 \
@@ -105,7 +89,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" .github/workflows/d630-kernel-build.yml
 
-      - name: Build Debian kernel package / ${{ matrix.variant }}
+      - name: Build Debian kernel package
         timeout-minutes: 330
         run: |
           set -Eeuo pipefail
@@ -116,22 +100,23 @@ jobs:
             --env SOURCE_VERSION \
             --env BUILD_JOBS \
             debian:bookworm \
-            bash -e -o pipefail -c 'bash scripts/build-d630-6.1.180.sh'
+            bash -e -o pipefail -c 'bash scripts/build-d630-kernel.sh' \
+            2>&1 | tee -a "build-$BUILD_VARIANT.log"
 
       - name: Verify package, configuration & checksums
         run: |
           set -Eeuo pipefail
           exec > >(tee -a "build-$BUILD_VARIANT.log") 2>&1
-          bash scripts/verify-d630-6.1.180-build.sh "$BUILD_VARIANT"
+          bash scripts/verify-d630-kernel-build.sh "$BUILD_VARIANT"
 
       - name: Upload diagnostics on success or failure
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: d630-kernel-diagnostics-${{ matrix.variant }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: d630-kernel-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            build-${{ matrix.variant }}.log
-            audit/${{ matrix.variant }}/
+            build-amd64.log
+            audit/amd64/
           if-no-files-found: warn
           retention-days: 30
           compression-level: 0
@@ -140,25 +125,25 @@ jobs:
         if: ${{ success() }}
         uses: actions/upload-artifact@v7
         with:
-          name: d630-kernel-${{ matrix.variant }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: dist/${{ matrix.variant }}/*
+          name: d630-debian-core2-kernel-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/amd64/*
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
 
-      - name: Publish validated packages to GitHub pre-release
+      - name: Publish validated kernel to GitHub pre-release
         if: ${{ success() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
           DIST="$GITHUB_WORKSPACE/dist/$BUILD_VARIANT"
-          TAG="d630-kernel-6.1.180-$BUILD_VARIANT-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          TAG="d630-debian-6.1.190-core2-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           test -s "$DIST/RELEASE-NOTES.md"
           gh release create "$TAG" "$DIST"/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "D630 Debian 12 kernel 6.1.180 ($BUILD_VARIANT)" \
+            --title "Debian 12 Core 2 kernel 6.1.190-d630-core2" \
             --notes-file "$DIST/RELEASE-NOTES.md" \
             --prerelease
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,name,assets

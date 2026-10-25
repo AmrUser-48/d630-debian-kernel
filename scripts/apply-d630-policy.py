@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the D630 overlay without rewriting Debian's native ABI or Makefile."""
+"""Apply D630 policy and configure a unique release on Debian's amd64 image target."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,18 +9,18 @@ import sys
 from d630_kconfig import normalize_fragment, parse_config_text, read_config
 
 if len(sys.argv) != 5:
-    raise SystemExit("usage: apply-d630-6.1.180-policy.py SOURCE AUDIT OVERLAY FEATURESET")
+    raise SystemExit("usage: apply-d630-policy.py SOURCE AUDIT OVERLAY FEATURESET")
 
 source = Path(sys.argv[1]).resolve()
 audit = Path(sys.argv[2]).resolve()
 overlay = Path(sys.argv[3]).resolve()
 featureset = sys.argv[4]
-if featureset not in {"none", "rt"}:
-    raise SystemExit("FEATURESET must be none or rt")
+if featureset != "none":
+    raise SystemExit("Only Debian amd64 featureset=none is supported")
 
 baseline_path = source / f"debian/build/build_amd64_{featureset}_amd64/.config"
 rules_path = source / "debian/rules.gen"
-target_config = source / "debian/config/d630-core2-6.1.180.config"
+target_config = source / "debian/config/d630-core2.config"
 if not baseline_path.is_file():
     raise SystemExit(f"Debian-generated config missing: {baseline_path}")
 if not rules_path.is_file() or not overlay.is_file():
@@ -146,12 +146,23 @@ for parent, prefixes in parent_disable.items():
         if any(symbol.startswith(prefix) for prefix in prefixes) and baseline.get(symbol, "n") in {"y", "m"}:
             child_disabled.append(symbol)
 
-# Explicit per-symbol disable list; Kconfig will resolve dependent symbols on
-# olddefconfig. A TSV audit artifact documents every deliberate change.
-all_disabled = sorted(set(sound_disabled + filesystem_disabled + gpu_disabled + child_disabled))
+# Explicitly prune unrelated FPGA, devfreq, tuner, MXM, Slimbus and media-codec
+# drivers. These m -> n transitions are policy, not unexplained losses.
+unused_hardware = {
+    "ALTERA_STAPL", "DEVFREQ_GOV_SIMPLE_ONDEMAND", "MXM_WMI", "SLIMBUS",
+    "VIDEO_CS3308", "VIDEO_CS5345",
+}
+unused_hardware.update(s for s in symbols if s.startswith("MEDIA_TUNER_"))
+unused_hardware_disabled = sorted(
+    s for s in unused_hardware if baseline.get(s, "n") in {"y", "m"}
+)
+all_disabled = sorted(set(
+    sound_disabled + filesystem_disabled + gpu_disabled + child_disabled
+    + unused_hardware_disabled
+))
 generated = overlay_text + "\n"
-generated += f"\n# Variant-specific scheduling policy: Debian RT featureset={featureset}.\n"
-generated += "CONFIG_EXPERT=y\nCONFIG_PREEMPT_RT=y\n" if featureset == "rt" else "# CONFIG_PREEMPT_RT is not set\n"
+generated += "\n# Standard Debian amd64 runtime kernel; PREEMPT_RT is disabled.\n"
+generated += "# CONFIG_PREEMPT_RT is not set\n"
 generated += "\n# D630 audio trim: keep HDA + Sigmatel, disable other sound devices.\n"
 generated += "".join(f"# CONFIG_{s} is not set\n" for s in sound_disabled)
 generated += "\n# D630 filesystem trim: disable unneeded filesystem implementations.\n"
@@ -160,6 +171,8 @@ generated += "\n# D630 GPU trim: retain the Intel GM965/i915 stack only.\n"
 generated += "".join(f"# CONFIG_{s} is not set\n" for s in gpu_disabled)
 generated += "\n# Child drivers disabled because their parent subsystem is excluded.\n"
 generated += "".join(f"# CONFIG_{s} is not set\n" for s in sorted(set(child_disabled)))
+generated += "\n# Unused D630 hardware/media drivers.\n"
+generated += "".join(f"# CONFIG_{s} is not set\n" for s in unused_hardware_disabled)
 
 target_config.parent.mkdir(parents=True, exist_ok=True)
 generated, collapsed = normalize_fragment(generated)
@@ -188,47 +201,68 @@ with (audit / "policy-disabled-symbols.tsv").open("w", encoding="utf-8") as out:
     for symbol, group in sorted(policy_reasons.items()):
         out.write(f"{symbol}\t{group}\n")
 
-# Patch only the selected Debian native image target's KCONFIG chain. Do not
-# alter the upstream version, ABI name, LOCALVERSION, or Makefile: Debian itself
-# must generate 6.1.0-52-amd64 / 6.1.0-52-rt-amd64.
+# Patch the selected Debian amd64 runtime image's setup and build recipes.
+# The setup and build must agree on the custom ABI/localversion to guarantee
+# the kernel release, boot image path, and modules directory all match.
 rules_before = rules_path.read_text(encoding="utf-8")
-target = f"binary-arch_amd64_{featureset}_amd64_real_image:"
+custom_abi = "6.1.190"
+custom_localversion = "-d630-core2"
+custom_release = custom_abi + custom_localversion
+config_rel = "debian/config/d630-core2.config"
+
+def set_make_arg(line: str, key: str, value: str) -> str:
+    pattern = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(key) + r"=(?:'[^']*'|[^ \t]+)")
+    updated, count = pattern.subn(key + "='" + value + "'", line, count=1)
+    if count != 1:
+        raise SystemExit(f"Cannot set {key} in Debian image recipe: {line.rstrip()}")
+    return updated
+
 lines = rules_before.splitlines(keepends=True)
-matches = [i for i, line in enumerate(lines) if line.startswith(target)]
-if len(matches) != 1:
-    raise SystemExit(f"Expected exactly one Debian target {target}; got {len(matches)}")
-start = matches[0]
-recipe_index = None
-for i in range(start + 1, min(start + 12, len(lines))):
-    if lines[i].startswith("\t") and "binary_image" in lines[i]:
-        recipe_index = i
-        break
-    if lines[i].strip() and not lines[i].startswith("\t"):
-        break
-if recipe_index is None:
-    raise SystemExit(f"Cannot find binary_image recipe for {target}")
-recipe = lines[recipe_index]
-match = re.search(r"KCONFIG='([^']*)'", recipe)
-if not match:
-    raise SystemExit(f"Cannot parse KCONFIG chain for {target}")
-parts = match.group(1).split()
-config_rel = "debian/config/d630-core2-6.1.180.config"
-if config_rel not in parts:
-    parts.append(config_rel)
-lines[recipe_index] = recipe[:match.start(1)] + " ".join(parts) + recipe[match.end(1):]
+targets = (
+    (f"setup_amd64_{featureset}_amd64_real_image:", "setup_image", False),
+    (f"binary-arch_amd64_{featureset}_amd64_real_image:", "binary_image", True),
+)
+for target, marker, build_image in targets:
+    matches = [i for i, line in enumerate(lines) if line.startswith(target)]
+    if len(matches) != 1:
+        raise SystemExit(f"Expected exactly one Debian target {target}; got {len(matches)}")
+    start_index = matches[0]
+    recipe_index = None
+    for i in range(start_index + 1, min(start_index + 12, len(lines))):
+        if lines[i].startswith("\t") and marker in lines[i]:
+            recipe_index = i
+            break
+        if lines[i].strip() and not lines[i].startswith("\t"):
+            break
+    if recipe_index is None:
+        raise SystemExit(f"Cannot find {marker} recipe for {target}")
+    recipe = lines[recipe_index]
+    recipe = set_make_arg(recipe, "ABINAME", custom_abi)
+    recipe = set_make_arg(recipe, "LOCALVERSION", custom_localversion)
+    recipe = set_make_arg(recipe, "LOCALVERSION_IMAGE", custom_localversion)
+    if build_image:
+        match = re.search(r"KCONFIG='([^']*)'", recipe)
+        if not match:
+            raise SystemExit(f"Cannot parse KCONFIG chain for {target}")
+        parts = match.group(1).split()
+        if config_rel not in parts:
+            parts.append(config_rel)
+        recipe = recipe[:match.start(1)] + " ".join(parts) + recipe[match.end(1):]
+    lines[recipe_index] = recipe
+
 rules_after = "".join(lines)
 rules_path.write_text(rules_after, encoding="utf-8")
-
 (audit / "rules.gen.diff").write_text(
     "\n".join(
-        ["# Debian rules.gen change: append the D630 overlay to only " + target,
-         "# No Makefile version, ABI name, or LOCALVERSION mutation performed."]
+        ["# Custom release applied to this Debian image target only",
+         "# Setup and build release: 6.1.190-d630-core2."]
         + [line.rstrip("\n") for line in __import__("difflib").unified_diff(
             rules_before.splitlines(), rules_after.splitlines(),
             fromfile="rules.gen.before", tofile="rules.gen.after")]
     ) + "\n",
     encoding="utf-8",
 )
-print(f"Applied D630 policy to {target}.")
+print(f"Applied D630 policy to {targets[1][0]}.")
+print(f"Configured kernel release: {custom_release}")
 print(f"Baseline config: {baseline_path}")
 print(f"Explicitly pruned symbols: {len(all_disabled)}")

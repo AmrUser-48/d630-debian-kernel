@@ -3,30 +3,26 @@ set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "$0")/.." && pwd)"
 BUILD_VARIANT="${BUILD_VARIANT:-amd64}"
-SOURCE_VERSION="${SOURCE_VERSION:-6.1.180-1}"
+SOURCE_VERSION="${SOURCE_VERSION:-6.1.190-1}"
 BUILD_JOBS="${BUILD_JOBS:-2}"
 case "$BUILD_VARIANT" in
   amd64)
     FEATURESET=none
-    EXPECTED_RELEASE=6.1.0-52-amd64
-    EXPECTED_PACKAGE=linux-image-6.1.0-52-amd64
+    DEBIAN_ABI=6.1.0-54
+    DEBIAN_PACKAGE="linux-image-${DEBIAN_ABI}-amd64-unsigned"
+    DEBIAN_RELEASE="${DEBIAN_ABI}-amd64"
+    EXPECTED_RELEASE=6.1.190-d630-core2
+    EXPECTED_PACKAGE=linux-image-6.1.190-d630-core2
     SETUP_TARGET=setup_amd64_none_amd64_real_image
     BUILD_TARGET=binary-arch_amd64_none_amd64_real_image
     ;;
-  amd64-rt)
-    FEATURESET=rt
-    EXPECTED_RELEASE=6.1.0-52-rt-amd64
-    EXPECTED_PACKAGE=linux-image-6.1.0-52-rt-amd64
-    SETUP_TARGET=setup_amd64_rt_amd64_real_image
-    BUILD_TARGET=binary-arch_amd64_rt_amd64_real_image
-    ;;
   *)
-    echo "Unsupported BUILD_VARIANT=$BUILD_VARIANT (expected amd64 or amd64-rt)" >&2
+    echo "Unsupported BUILD_VARIANT=$BUILD_VARIANT (expected amd64)" >&2
     exit 2
     ;;
 esac
-[[ "$SOURCE_VERSION" == "6.1.180-1" ]] || {
-  echo "This workflow is pinned to linux source 6.1.180-1." >&2
+[[ "$SOURCE_VERSION" == "6.1.190-1" ]] || {
+  echo "This workflow is pinned to Debian linux source 6.1.190-1." >&2
   exit 2
 }
 
@@ -77,12 +73,12 @@ apt-get install -y --no-install-recommends \
   ca-certificates curl dpkg-dev iucode-tool
 apt-get clean
 
-echo "=== Download the exact Debian linux 6.1.180-1 source archives ==="
-for file in linux_6.1.180-1.dsc linux_6.1.180.orig.tar.xz linux_6.1.180-1.debian.tar.xz; do
+echo "=== Download the exact Debian linux 6.1.190-1 source archives ==="
+for file in linux_6.1.190-1.dsc linux_6.1.190.orig.tar.xz linux_6.1.190-1.debian.tar.xz; do
   curl --fail --location --retry 3 --retry-delay 2 "$SOURCE_BASE/$file" -o "$INPUTS/source/$file"
   test -s "$INPUTS/source/$file"
 done
-dpkg-source -x "$INPUTS/source/linux_6.1.180-1.dsc" "$SOURCE" \
+dpkg-source -x "$INPUTS/source/linux_6.1.190-1.dsc" "$SOURCE" \
   > "$AUDIT/source-extraction.log" 2>&1
 ACTUAL_SOURCE_VERSION="$(dpkg-parsechangelog -l "$SOURCE/debian/changelog" -S Version)"
 test "$ACTUAL_SOURCE_VERSION" = "$SOURCE_VERSION" || {
@@ -145,12 +141,17 @@ cp "$BUILD/.config" "$AUDIT/debian-baseline.config"
 chown builder:builder "$AUDIT/debian-baseline.config"
 
 echo "=== Apply the audited D630 overlay to only the requested image target ==="
-runuser -u builder -- python3 "$ROOT/scripts/apply-d630-6.1.180-policy.py" \
-  "$SOURCE" "$AUDIT" "$ROOT/config/d630-core2-6.1.180.config" "$FEATURESET"
+runuser -u builder -- python3 "$ROOT/scripts/apply-d630-policy.py" \
+  "$SOURCE" "$AUDIT" "$ROOT/config/d630-core2.config" "$FEATURESET"
+
+echo "=== Regenerate Debian setup with the custom release variables ==="
+runuser -u builder -- env DEB_RULES_REQUIRES_ROOT=no \
+  make -B -C "$SOURCE" -f debian/rules.gen "$SETUP_TARGET"
+test -s "$BUILD/.kernelvariables" || { echo "Debian .kernelvariables missing after custom setup" >&2; exit 1; }
 (
   cd "$SOURCE"
   runuser -u builder -- "$SOURCE/scripts/kconfig/merge_config.sh" -m -O "$BUILD" \
-    "$AUDIT/debian-baseline.config" "$SOURCE/debian/config/d630-core2-6.1.180.config"
+    "$AUDIT/debian-baseline.config" "$SOURCE/debian/config/d630-core2.config"
 ) > "$AUDIT/kconfig-merge.log" 2>&1
 KCONFIG_SOURCE="$SOURCE/debian/build/source_$FEATURESET"
 test -d "$KCONFIG_SOURCE" || {
@@ -168,9 +169,16 @@ if grep -Ein 'warning: override:|changes choice state' "$AUDIT/kconfig-olddefcon
   exit 1
 fi
 cp "$BUILD/.config" "$AUDIT/preflight-final.config"
-python3 "$ROOT/scripts/audit-d630-6.1.180.py" \
+python3 "$ROOT/scripts/audit-d630.py" \
   "$AUDIT/debian-baseline.config" "$BUILD/.config" \
-  "$SOURCE/debian/config/d630-core2-6.1.180.config" "$AUDIT" "$BUILD_VARIANT"
+  "$SOURCE/debian/config/d630-core2.config" "$AUDIT" "$BUILD_VARIANT"
+
+ACTUAL_KRELEASE="$(sed -n 's/^override KERNELRELEASE = //p' "$BUILD/.kernelvariables" | tail -n 1)"
+test "$ACTUAL_KRELEASE" = "$EXPECTED_RELEASE" || {
+  echo "FAIL: Debian setup generated KERNELRELEASE=$ACTUAL_KRELEASE; expected $EXPECTED_RELEASE." >&2
+  exit 1
+}
+echo "PASS: Debian setup generated KERNELRELEASE=$ACTUAL_KRELEASE."
 
 echo "=== Build only Debian's native runtime image target ==="
 runuser -u builder -- env \
@@ -188,9 +196,14 @@ fi
 echo "=== Audit the actual post-build config and both embedded firmware blobs ==="
 test -s "$BUILD/.config"
 cp "$BUILD/.config" "$AUDIT/d630-final.config"
-python3 "$ROOT/scripts/audit-d630-6.1.180.py" \
+python3 "$ROOT/scripts/audit-d630.py" \
   "$AUDIT/debian-baseline.config" "$BUILD/.config" \
-  "$SOURCE/debian/config/d630-core2-6.1.180.config" "$AUDIT" "$BUILD_VARIANT"
+  "$SOURCE/debian/config/d630-core2.config" "$AUDIT" "$BUILD_VARIANT"
+ACTUAL_KRELEASE="$(runuser -u builder -- make -s -C "$KCONFIG_SOURCE" O="$BUILD" kernelrelease)"
+test "$ACTUAL_KRELEASE" = "$EXPECTED_RELEASE" || {
+  echo "FAIL: built kernelrelease=$ACTUAL_KRELEASE; expected $EXPECTED_RELEASE." >&2
+  exit 1
+}
 test -s "$BUILD/vmlinux" || {
   find "$SOURCE/debian/build" -maxdepth 5 -type f -name vmlinux -print >&2 || true
   echo "Uncompressed vmlinux missing after native build" >&2
@@ -211,7 +224,7 @@ PY
 
 echo "=== Find and repackage the unsigned runtime image with a distinct upgrade version ==="
 mapfile -t CANDIDATES < <(
-  find "$WORK" -type f -name "linux-image-$EXPECTED_RELEASE-unsigned_*.deb" -print | sort
+  find "$WORK" -type f -name "${DEBIAN_PACKAGE}_*.deb" -print | sort
 )
 if (( ${#CANDIDATES[@]} != 1 )); then
   echo "Expected exactly one Debian unsigned runtime package for $EXPECTED_RELEASE; found ${#CANDIDATES[@]}." >&2
@@ -222,7 +235,7 @@ PACKAGE="${CANDIDATES[0]}"
 OLD_PACKAGE="$(dpkg-deb -f "$PACKAGE" Package)"
 PACKAGE_VERSION="$(dpkg-deb -f "$PACKAGE" Version)"
 PACKAGE_ARCH="$(dpkg-deb -f "$PACKAGE" Architecture)"
-test "$OLD_PACKAGE" = "linux-image-$EXPECTED_RELEASE-unsigned"
+test "$OLD_PACKAGE" = "$DEBIAN_PACKAGE"
 test "$PACKAGE_VERSION" = "$SOURCE_VERSION" || {
   echo "Expected source binary version $SOURCE_VERSION; got $PACKAGE_VERSION" >&2
   exit 1
@@ -251,7 +264,7 @@ set_field("Package", new)
 set_field("Version", version)
 set_field(
     "Description",
-    f"Stripped Debian 12 Linux kernel image for Dell Latitude D630 / Intel Core 2 ({variant}); custom unsigned build from linux 6.1.180-1.",
+    f"Stripped Debian 12 Linux kernel image for Dell Latitude D630 / Intel Core 2 ({variant}); custom unsigned build from linux 6.1.190-1.",
 )
 # Remove self-conflicting clauses from the Debian unsigned/signed transition.
 for field in ("Conflicts", "Breaks", "Replaces"):
@@ -288,7 +301,7 @@ if [[ -n "$MICROCODE_LICENSE" && -s "$MICROCODE_LICENSE" ]]; then
 fi
 for file in "$REPACK"/DEBIAN/*; do
   [[ -f "$file" && "$file" != "$REPACK/DEBIAN/control" && "$file" != "$REPACK/DEBIAN/md5sums" ]] || continue
-  sed -i "s/$OLD_PACKAGE/$NEW_PACKAGE/g" "$file"
+  sed -i -e "s/$OLD_PACKAGE/$NEW_PACKAGE/g" -e "s/$DEBIAN_RELEASE/$EXPECTED_RELEASE/g" "$file"
 done
 (
   cd "$REPACK"
@@ -315,6 +328,7 @@ require_module() {
     }
   fi
 }
+require_module acpi-cpufreq X86_ACPI_CPUFREQ
 require_module iwl3945 IWL3945
 require_module snd-timer SND_TIMER
 require_module snd-hda-core SND_HDA_CORE
@@ -364,7 +378,7 @@ cat > "$DIST/RELEASE-NOTES.md" <<EOF
 - CPU target: Intel Core 2 Duo T7250, selected through CONFIG_MCORE2.
 - Built-in: zram (default LZ4, with LZO-RLE, Zstd, LZ4, LZO, LZ4HC and 842 compressors enabled); ext4, Btrfs, NTFS3, FAT/VFAT/exFAT, UDF and SquashFS with zlib/LZ4/LZO/XZ/Zstd support; MSR and CPUID; early Intel CPU microcode and Intel 3945ABG firmware.
 - Loadable D630 drivers retained: Intel i915 where Debian's baseline selects it as a module, Intel 3945ABG Wi-Fi, Intel HDA/Sigmatel audio and PS/2 touchpad.
-- The RT flavour is built using Debian's native RT featureset and is audited for PREEMPT_RT.
+- CPU frequency scaling: ACPI P-state driver plus the built-in userspace governor.
 - The official firmware-iwlwifi and intel-microcode .debs plus the final config and audit reports accompany the image.
 - The kernel image package is custom and unsigned by Debian. On this legacy-BIOS D630, keep a known-good boot entry before installing.
 - Hosted CI validates build/package/configuration only; boot and hardware behaviour still require testing on the actual D630.
@@ -375,10 +389,12 @@ EOF
   echo "Debian source package: linux=$SOURCE_VERSION"
   echo "Variant: $BUILD_VARIANT (featureset $FEATURESET)"
   echo "Kernel release: $EXPECTED_RELEASE"
+  echo "CPU frequency governors: CONFIG_CPU_FREQ=y, CONFIG_CPU_FREQ_GOV_USERSPACE=y"
   echo "Package: $(dpkg-deb -f "$DEB_OUTPUT" Package)"
   echo "Version: $(dpkg-deb -f "$DEB_OUTPUT" Version)"
   echo "Architecture: $(dpkg-deb -f "$DEB_OUTPUT" Architecture)"
   echo "Default zram compressor: LZ4; all Linux 6.1 zram compressors enabled"
+  echo "CPU frequency: ACPI P-state driver and userspace governor enabled"
   echo "Filesystems: ext4, Btrfs, NTFS3, FAT/VFAT/exFAT, UDF and SquashFS with zlib/LZ4/LZO/XZ/Zstd"
   echo "Embedded firmware: Intel T7250 microcode and Intel 3945ABG firmware"
   echo "GPU/audio firmware: not required for GM965/i915 + ICH8/Sigmatel on this target"
