@@ -50,26 +50,6 @@ jobs:
             echo "Started at UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           } > "build-$BUILD_VARIANT.log"
 
-      - name: Reclaim unused runner disk space
-        run: |
-          set -Eeuo pipefail
-          exec > >(tee -a "build-$BUILD_VARIANT.log") 2>&1
-          echo "=== Disk usage before cleanup ==="
-          df -h "$GITHUB_WORKSPACE"
-          docker system df
-          sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /opt/ghc \
-            /usr/local/share/boost \
-            /usr/share/swift \
-            /usr/lib/mono \
-            /opt/hostedtoolcache/CodeQL
-          docker system prune --all --force --volumes
-          echo "=== Disk usage after cleanup ==="
-          df -h "$GITHUB_WORKSPACE"
-          docker system df
-
       - name: Lint workflow and build scripts
         run: |
           set -Eeuo pipefail
