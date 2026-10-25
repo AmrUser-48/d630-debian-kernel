@@ -199,7 +199,8 @@ cp "$BUILD/.config" "$AUDIT/d630-final.config"
 python3 "$ROOT/scripts/audit-d630.py" \
   "$AUDIT/debian-baseline.config" "$BUILD/.config" \
   "$SOURCE/debian/config/d630-core2.config" "$AUDIT" "$BUILD_VARIANT"
-ACTUAL_KRELEASE="$(runuser -u builder -- make -s -C "$KCONFIG_SOURCE" O="$BUILD" kernelrelease)"
+# LOCALVERSION is a make-time input, not persisted in .config. Match Debian's image build recipe.
+ACTUAL_KRELEASE="$(runuser -u builder -- make -s -C "$KCONFIG_SOURCE" O="$BUILD" LOCALVERSION=-d630-core2 kernelrelease)"
 test "$ACTUAL_KRELEASE" = "$EXPECTED_RELEASE" || {
   echo "FAIL: built kernelrelease=$ACTUAL_KRELEASE; expected $EXPECTED_RELEASE." >&2
   exit 1
