@@ -105,7 +105,7 @@ parent_disable = {
     "6LOWPAN": ("6LOWPAN", "BT_6LOWPAN"),
     "USB_GADGET": ("USB_GADGET", "USBIP_VUDC", "USB_DUMMY_HCD", "USB_FUNCTIONFS",
                    "USB_LIBCOMPOSITE", "USB_CONFIGFS", "USB_F_", "USB_U_",
-                   "USB_ETH", "USB_G_SERIAL"),
+                   "USB_ETH", "USB_G_SERIAL", "USB_NET2280"),
     "BLK_DEV_NVME": ("NVME", "BLK_DEV_NVME"),
     "MEDIA_DIGITAL_TV_SUPPORT": ("DVB", "MANTIS_CORE", "MEDIA_ALTERA_CI",
                                  "SMS_SDIO_DRV", "SMS_SIANO_MDTV", "SMS_USB_DRV",
