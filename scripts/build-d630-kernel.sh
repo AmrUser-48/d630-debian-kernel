@@ -11,8 +11,8 @@ case "$BUILD_VARIANT" in
     DEBIAN_ABI=6.1.0-52
     DEBIAN_PACKAGE="linux-image-${DEBIAN_ABI}-amd64-unsigned"
     DEBIAN_RELEASE="${DEBIAN_ABI}-amd64"
-    EXPECTED_RELEASE=6.1.180-d630-core2
-    EXPECTED_PACKAGE=linux-image-6.1.180-d630-core2
+    EXPECTED_RELEASE=6.1.0-52-d630-core2
+    EXPECTED_PACKAGE=linux-image-6.1.0-52-d630-core2
     SETUP_TARGET=setup_amd64_none_amd64_real_image
     BUILD_TARGET=binary-arch_amd64_none_amd64_real_image
     ;;
@@ -32,7 +32,7 @@ DIST="$ROOT/dist/$BUILD_VARIANT"
 INPUTS="$WORK/inputs"
 SOURCE="$WORK/linux-source"
 BUILD="$SOURCE/debian/build/build_amd64_${FEATURESET}_amd64"
-IMAGE_VERSION="${SOURCE_VERSION}+d6301"
+IMAGE_VERSION="${SOURCE_VERSION}"
 SOURCE_BASE="https://security.debian.org/debian-security/pool/updates/main/l/linux"
 
 export DEBIAN_FRONTEND=noninteractive
@@ -354,6 +354,36 @@ require_module snd-hda-intel SND_HDA_INTEL
 require_module snd-hda-codec-idt SND_HDA_CODEC_SIGMATEL
 require_module psmouse MOUSE_PS2
 require_module i915 DRM_I915
+require_module fuse FUSE_FS
+require_module cuse CUSE
+require_module overlay OVERLAY_FS
+require_module efivarfs EFIVAR_FS
+require_module xfs XFS_FS
+require_module f2fs F2FS_FS
+require_module erofs EROFS_FS
+require_module nfs NFS_FS
+require_module nfsd NFSD
+require_module cifs CIFS
+require_module ksmbd SMB_SERVER
+require_module snd-usb-audio SND_USB_AUDIO
+require_module snd-hda-codec-realtek SND_HDA_CODEC_REALTEK
+require_module snd-seq SND_SEQUENCER
+require_module iwl4965 IWL4965
+require_module iwlwifi IWLWIFI
+require_module iwldvm IWLDVM
+require_module iwlmvm IWLMVM
+require_module virtio_pci VIRTIO_PCI
+require_module virtio_blk VIRTIO_BLK
+require_module virtio_net VIRTIO_NET
+require_module virtio_console VIRTIO_CONSOLE
+require_module virtio_balloon VIRTIO_BALLOON
+require_module virtio_gpu DRM_VIRTIO_GPU
+require_module virtio_fs VIRTIO_FS
+require_module iscsi_tcp ISCSI_TCP
+require_module scsi_dh_alua SCSI_DH_ALUA
+require_module scsi_dh_emc SCSI_DH_EMC
+require_module scsi_dh_hp_sw SCSI_DH_HP_SW
+require_module scsi_dh_rdac SCSI_DH_RDAC
 
 DEB_NAME="$NEW_PACKAGE"_"$IMAGE_VERSION"_amd64.deb
 DEB_OUTPUT="$DIST/$DEB_NAME"
@@ -392,7 +422,8 @@ cat > "$DIST/RELEASE-NOTES.md" <<EOF
 - Kernel release: $EXPECTED_RELEASE.
 - Binary package: $NEW_PACKAGE, version $IMAGE_VERSION, amd64.
 - CPU target: Intel Core 2 Duo T7250, selected through CONFIG_MCORE2.
-- Built-in: zram (default LZ4, with LZO-RLE, Zstd, LZ4, LZO, LZ4HC and 842 compressors enabled); ext4, Btrfs, NTFS3, FAT/VFAT/exFAT, UDF and SquashFS with zlib/LZ4/LZO/XZ/Zstd support; MSR and CPUID; early Intel CPU microcode and Intel 3945ABG firmware.
+- Built-in: autofs, zram (default LZ4, with LZO-RLE, Zstd, LZ4, LZO, LZ4HC and 842 compressors enabled); ext4, Btrfs, NTFS3, FAT/VFAT/exFAT, UDF and SquashFS with zlib/LZ4/LZO/XZ/Zstd support; MSR and CPUID; early Intel CPU microcode and Intel 3945ABG firmware.
+- Optional modules: FUSE/CUSE, overlayfs, EFI variables, XFS/F2FS/EROFS, NFS/NFSD, CIFS/SMB server, USB audio, Realtek HDA, MIDI sequencer, Intel 4965/newer Wi-Fi, VirtIO and selected SCSI/iSCSI drivers. Installed modules are Zstandard-compressed (`.ko.zst`).
 - Loadable D630 drivers retained: Intel i915 where Debian's baseline selects it as a module, Intel 3945ABG Wi-Fi, Intel HDA/Sigmatel audio and PS/2 touchpad.
 - CPU frequency scaling: ACPI P-state driver plus the built-in userspace governor.
 - The official firmware-iwlwifi and intel-microcode .debs plus the final config and audit reports accompany the image.
@@ -410,8 +441,9 @@ EOF
   echo "Version: $(dpkg-deb -f "$DEB_OUTPUT" Version)"
   echo "Architecture: $(dpkg-deb -f "$DEB_OUTPUT" Architecture)"
   echo "Default zram compressor: LZ4; all Linux 6.1 zram compressors enabled"
+  echo "Installed kernel modules compressed with Zstandard (.ko.zst)"
   echo "CPU frequency: ACPI P-state driver and userspace governor enabled"
-  echo "Filesystems: ext4, Btrfs, NTFS3, FAT/VFAT/exFAT, UDF and SquashFS with zlib/LZ4/LZO/XZ/Zstd"
+  echo "Filesystems: ext4, Btrfs, NTFS3, FUSE/NTFS-3G, autofs (built-in), overlayfs, XFS, F2FS, EROFS, FAT/VFAT/exFAT, UDF, SquashFS; NFS and CIFS/SMB network filesystems"
   echo "Embedded firmware: Intel T7250 microcode and Intel 3945ABG firmware"
   echo "GPU/audio firmware: not required for GM965/i915 + ICH8/Sigmatel on this target"
   echo "Package is custom unsigned; Debian's signed kernel package was not modified."

@@ -37,6 +37,14 @@ required = {
     "EXTRA_FIRMWARE_DIR": '"/lib/firmware"',
     "MODULES": "y", "MODULE_UNLOAD": "y", "DEBUG_INFO_NONE": "y", "DEBUG_INFO": "n",
     "KERNEL_XZ": "y",
+    "MODULE_COMPRESS_NONE": "n", "MODULE_COMPRESS_GZIP": "n",
+    "MODULE_COMPRESS_XZ": "n", "MODULE_COMPRESS_ZSTD": "y",
+    "AUTOFS4_FS": "y", "AUTOFS_FS": "y", "FUSE_FS": "m", "CUSE": "m",
+    "OVERLAY_FS": "m", "EFI": "y", "EFIVAR_FS": "m",
+    "XFS_FS": "m", "F2FS_FS": "m", "EROFS_FS": "m",
+    "NETWORK_FILESYSTEMS": "y", "NFS_FS": "m", "NFS_V2": "n",
+    "NFS_V3": "m", "NFS_V4": "m", "NFSD": "m", "NFSD_V4": "y",
+    "CIFS": "m", "SMB_SERVER": "m",
     "EXT4_FS": "y", "BTRFS_FS": "y", "NTFS3_FS": "y", "NTFS3_LZX_XPRESS": "y",
     "FAT_FS": "y", "MSDOS_FS": "y", "VFAT_FS": "y", "EXFAT_FS": "y", "UDF_FS": "y",
     "SQUASHFS": "y", "SQUASHFS_ZLIB": "y", "SQUASHFS_LZ4": "y",
@@ -51,16 +59,31 @@ required = {
     "ZSTD_COMPRESS": "y", "ZSTD_DECOMPRESS": "y",
     "NLS": "y", "NLS_UTF8": "y", "NLS_CODEPAGE_437": "y",
     "WLAN": "y", "CFG80211": "m", "MAC80211": "m", "RFKILL": "y",
-    "IWLEGACY": "m", "IWL3945": "m",
+    "IWLEGACY": "m", "IWL3945": "m", "IWL4965": "m",
+    "IWLWIFI": "m", "IWLDVM": "m", "IWLMVM": "m",
     "SOUND": "y", "SND": "y", "SND_PCI": "y", "SND_HDA": "m",
     "SND_PCM_TIMER": "y", "SND_TIMER": "m", "SND_HDA_CORE": "m",
     "SND_HDA_GENERIC": "m", "SND_PCM": "m",
     "SND_HDA_INTEL": "m", "SND_HDA_CODEC_SIGMATEL": "m",
+    "SND_HDA_CODEC_REALTEK": "m", "SND_USB_AUDIO": "m",
+    "SND_SEQUENCER": "m", "SND_RAWMIDI": "m",
+    "SCSI_LOWLEVEL": "y", "SCSI_DH": "y",
+    "SCSI_DH_ALUA": "m", "SCSI_DH_EMC": "m", "SCSI_DH_HP_SW": "m",
+    "SCSI_DH_RDAC": "m", "ISCSI_TCP": "m",
+    "MEGARAID_SAS": "m", "SCSI_MPT2SAS": "m", "SCSI_MPT3SAS": "m",
+    "SCSI_SMARTPQI": "m", "SCSI_HPSA": "m", "SCSI_AACRAID": "m",
+    "SCSI_AIC7XXX": "m", "SCSI_AIC79XX": "m",
+    "VIRTIO_MENU": "y", "VIRTIO_PCI": "m", "VIRTIO_BLK": "m",
+    "VIRTIO_NET": "m", "VIRTIO_CONSOLE": "m", "VIRTIO_BALLOON": "m",
+    "VIRTIO_INPUT": "m", "VIRTIO_MMIO": "m", "DRM_VIRTIO_GPU": "m",
+    "VIRTIO_FS": "m", "XEN": "y", "XEN_PVHVM_GUEST": "y",
+    "XEN_PVH": "y", "XEN_BLKDEV_FRONTEND": "m",
+    "XEN_NETDEV_FRONTEND": "m", "XEN_SCSI_FRONTEND": "m", "HVC_XEN": "m",
     "DVB_CORE": "n", "MEDIA_DIGITAL_TV_SUPPORT": "n",
     "MEDIA_RADIO_SUPPORT": "n", "MEDIA_SDR_SUPPORT": "n", "MEDIA_TEST_SUPPORT": "n",
     "CAN": "n", "ISDN": "n", "INFINIBAND": "n", "FIREWIRE": "n",
     "NFC": "n", "WIMAX": "n", "IEEE802154": "n", "6LOWPAN": "n",
-    "USB_GADGET": "n", "MTD": "n", "BLK_DEV_NVME": "n", "SCSI_LOWLEVEL": "n",
+    "USB_GADGET": "n", "MTD": "n", "BLK_DEV_NVME": "n",
 }
 required["PREEMPT_RT"] = "n"
 for symbol, expected in required.items():
@@ -95,14 +118,16 @@ if policy_file.is_file():
 
 sound_keep = {
     "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_HDA_INTEL",
-    "SND_PCI", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE", "SND_HDA_COMPONENT",
+    "SND_PCI", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CODEC_REALTEK", "SND_USB_AUDIO",
+    "SND_SEQUENCER", "SND_SEQ_DEVICE", "SND_RAWMIDI", "SND_HDA_CORE", "SND_HDA_COMPONENT",
     "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS", "SND_INTEL_DSP_CONFIG",
     "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE", "SND_JACK", "SND_CTL_LED", "SND_VMASTER",
 }
 fs_keep = {
-    "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "FAT_FS", "MSDOS_FS", "VFAT_FS",
-    "EXFAT_FS", "UDF_FS", "ISO9660_FS", "SQUASHFS", "PROC_FS", "DEVPTS_FS",
-    "CONFIGFS_FS", "DEBUG_FS",
+    "AUTOFS4_FS", "AUTOFS_FS", "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "FAT_FS",
+    "MSDOS_FS", "VFAT_FS", "EXFAT_FS", "UDF_FS", "ISO9660_FS", "SQUASHFS",
+    "FUSE_FS", "OVERLAY_FS", "EFIVAR_FS", "XFS_FS", "F2FS_FS", "EROFS_FS",
+    "PROC_FS", "DEVPTS_FS", "CONFIGFS_FS", "DEBUG_FS",
 }
 gpu_prefixes = (
     "DRM_AMDGPU", "DRM_RADEON", "DRM_NOUVEAU", "DRM_NVIDIA", "DRM_VMWGFX",
@@ -164,15 +189,11 @@ def intentional_drop(symbol: str) -> bool:
     # still need one of the narrowly defined family/dependency rules below.
     if overlay.get(symbol) == "n":
         return True
-    if symbol.startswith("SND_") and symbol not in sound_keep:
+    if symbol.startswith("SND_") and symbol not in sound_keep and not (symbol.startswith("SND_SEQ_") and val(final, "SND_SEQUENCER") in {"m", "y"}):
         return True
-    if (symbol.endswith("_FS") and symbol not in fs_keep) or symbol in {
-        "CIFS", "CIFS_UPCALL", "CIFS_XATTR", "CIFS_POSIX", "NFS_V2", "NFS_V3",
-        "NFS_V4", "NFS_SWAP", "NFSD", "NFSD_V2", "NFSD_V3", "NFSD_V4",
-        "SMB_SERVER", "SMB_SERVER_SMBDIRECT", "SMBFS", "LOCKD", "SUNRPC",
-        "SUNRPC_GSS", "RPCSEC_GSS_KRB5", "PNFS_BLOCK", "PNFS_FILE_LAYOUT",
+    if (symbol.endswith("_FS") and symbol not in fs_keep and val(final, symbol) == "n") or symbol in {
+        "SMB_SERVER_SMBDIRECT", "SMBFS", "PNFS_BLOCK", "PNFS_FILE_LAYOUT",
         "PNFS_FLEXFILE_LAYOUT", "OCFS2_FS_O2CB", "OCFS2_FS_USERSPACE_CLUSTER",
-        "CUSE", "FUSE_FS",
     }:
         return True
     if any(symbol.startswith(prefix) for prefix in gpu_prefixes):

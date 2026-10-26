@@ -4,8 +4,8 @@
 
 - Source package: `linux=6.1.180-1` from Bookworm security.
 - Debian amd64 reference image ABI: `6.1.0-52-amd64`.
-- Custom kernel release/module directory: `6.1.180-d630-core2`.
-- Output package: `linux-image-6.1.180-d630-core2`, version `6.1.180-1+d6301`, architecture `amd64`.
+- Custom kernel release/module directory: `6.1.0-52-d630-core2`.
+- Output package: `linux-image-6.1.0-52-d630-core2`, version `6.1.180-1`, architecture `amd64`.
 
 ## Configuration policy
 
@@ -21,7 +21,7 @@
 
 ## Deterministic build
 
-Patch only Debian's standard amd64 runtime image setup/build target so its ABI/localversion, generated `KERNELRELEASE`, boot path and modules directory agree on `6.1.180-d630-core2`. Stop before the long compile if generated kernel release differs.
+Patch only Debian's standard amd64 runtime image setup/build target so its ABI/localversion, generated `KERNELRELEASE`, boot path and modules directory agree on `6.1.0-52-d630-core2`. Stop before the long compile if generated kernel release differs.
 
 The final audit classifies Kconfig changes. Unexplained module drops, Kconfig override/choice warnings, missing required symbols/modules/firmware, incorrect release or inconsistent package metadata fail the build. Publish only a validated package.
 

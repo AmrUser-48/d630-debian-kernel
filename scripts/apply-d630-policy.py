@@ -29,42 +29,45 @@ if not rules_path.is_file() or not overlay.is_file():
 baseline = read_config(baseline_path)
 symbols = set(baseline)
 overlay_text = overlay.read_text(encoding="utf-8").rstrip()
+overlay_values = parse_config_text(overlay_text)
 
-# Retain only the D630's Intel HDA/Sigmatel path. SND_HDA is an invisible
-# tristate selected by SND_HDA_INTEL; a modular controller resolves the core
-# to m. SND_PCM_TIMER is explicitly retained for normal ALSA PCM timing.
+# Retain HDA/Sigmatel plus USB audio, Realtek codecs, and MIDI sequencer support.
+# Keep SND_SEQ_* dependencies when the sequencer is enabled.
 sound_keep = {
-    "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA",
-    # SND_PCI gates the PCI sound-driver Kconfig menu, including Intel HDA, in Linux 6.1.
-    "SND_PCI", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CORE",
-    "SND_HDA_COMPONENT", "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS",
+    "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_PCI",
+    "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CODEC_REALTEK",
+    "SND_HDA_CORE", "SND_HDA_COMPONENT", "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS",
     "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
-    "SND_JACK", "SND_CTL_LED", "SND_VMASTER",
+    "SND_JACK", "SND_CTL_LED", "SND_VMASTER", "SND_USB_AUDIO",
+    "SND_SEQUENCER", "SND_SEQ_DEVICE", "SND_RAWMIDI",
 }
-required_sound_keep = {"SND_PCI", "SND_HDA", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL"}
+required_sound_keep = {
+    "SND_PCI", "SND_HDA", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL",
+    "SND_HDA_CODEC_REALTEK", "SND_USB_AUDIO", "SND_SEQUENCER", "SND_RAWMIDI",
+}
 if not required_sound_keep.issubset(sound_keep):
     raise SystemExit("Audio policy is missing required HDA dependencies: " + ", ".join(sorted(required_sound_keep - sound_keep)))
 
 sound_disabled = sorted(
     s for s in symbols if s.startswith(("SND_", "SOUNDWIRE_")) and s not in sound_keep
+    and not (s.startswith("SND_SEQ_") and overlay_values.get("SND_SEQUENCER", "n") in {"m", "y"})
     and baseline.get(s, "n") in {"y", "m"}
 )
 
 # Retain the filesystems used by the laptop and the standalone Gentoo boot
 # contract. Preserve configfs/debugfs as Debian baseline facilities.
 filesystem_keep = {
-    "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "FAT_FS", "MSDOS_FS", "VFAT_FS",
-    "EXFAT_FS", "UDF_FS", "ISO9660_FS", "SQUASHFS", "PROC_FS", "DEVPTS_FS",
-    "CONFIGFS_FS", "DEBUG_FS",
+    "AUTOFS4_FS", "AUTOFS_FS", "EXT4_FS", "BTRFS_FS", "NTFS3_FS", "FAT_FS",
+    "MSDOS_FS", "VFAT_FS", "EXFAT_FS", "UDF_FS", "ISO9660_FS", "SQUASHFS",
+    "FUSE_FS", "OVERLAY_FS", "EFIVAR_FS", "XFS_FS", "F2FS_FS", "EROFS_FS",
+    "PROC_FS", "DEVPTS_FS", "CONFIGFS_FS", "DEBUG_FS",
 }
-filesystem_extras = {
-    "CRAMFS", "ROMFS", "CIFS", "CIFS_UPCALL", "CIFS_XATTR", "CIFS_POSIX",
-    "NFS_V2", "NFS_V3", "NFS_V4", "NFS_SWAP", "NFSD", "NFSD_V2",
-    "NFSD_V3", "NFSD_V4", "SMB_SERVER", "SMB_SERVER_SMBDIRECT",
-}
+# Network filesystems and FUSE remain enabled by the committed overlay.
+filesystem_extras = {"CRAMFS", "ROMFS"}
 filesystem_disabled = sorted(
     s for s in symbols
     if ((s.endswith("_FS") and s not in filesystem_keep) or s in filesystem_extras)
+    and overlay_values.get(s, "n") == "n"
     and baseline.get(s, "n") in {"y", "m"}
 )
 
@@ -130,7 +133,7 @@ parent_disable = {
     "MTD": ("MTD", "FTL", "INFTL", "NFTL", "RFD_FTL", "SSFDC", "JFFS2_FS",
             "UBIFS_FS", "BCH"),
     "XEN": ("XEN", "TCG_XEN", "NET_9P_XEN"),
-    "VIRTIO": ("VIRTIO_", "HW_RANDOM_VIRTIO", "CRYPTO_DEV_VIRTIO", "NET_9P_VIRTIO"),
+    "VIRTIO_MENU": ("VIRTIO_", "HW_RANDOM_VIRTIO", "CRYPTO_DEV_VIRTIO", "NET_9P_VIRTIO"),
     "NFS_FS": ("NFS_", "SUNRPC", "LOCKD"),
 }
 parent_values = read_config(overlay)
@@ -205,7 +208,7 @@ with (audit / "policy-disabled-symbols.tsv").open("w", encoding="utf-8") as out:
 # The setup and build must agree on the custom ABI/localversion to guarantee
 # the kernel release, boot image path, and modules directory all match.
 rules_before = rules_path.read_text(encoding="utf-8")
-custom_abi = "6.1.180"
+custom_abi = "6.1.0-52"
 custom_localversion = "-d630-core2"
 custom_release = custom_abi + custom_localversion
 config_rel = "debian/config/d630-core2.config"
@@ -255,7 +258,7 @@ rules_path.write_text(rules_after, encoding="utf-8")
 (audit / "rules.gen.diff").write_text(
     "\n".join(
         ["# Custom release applied to this Debian image target only",
-         "# Setup and build release: 6.1.180-d630-core2."]
+         "# Setup and build release: 6.1.0-52-d630-core2."]
         + [line.rstrip("\n") for line in __import__("difflib").unified_diff(
             rules_before.splitlines(), rules_after.splitlines(),
             fromfile="rules.gen.before", tofile="rules.gen.after")]

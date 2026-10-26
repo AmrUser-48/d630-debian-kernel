@@ -6,8 +6,8 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 VARIANT="${1:-${BUILD_VARIANT:-}}"
 case "$VARIANT" in
   amd64)
-    EXPECTED_PACKAGE=linux-image-6.1.180-d630-core2
-    EXPECTED_RELEASE=6.1.180-d630-core2
+    EXPECTED_PACKAGE=linux-image-6.1.0-52-d630-core2
+    EXPECTED_RELEASE=6.1.0-52-d630-core2
     EXPECTED_RT=n
     ;;
   *)
@@ -18,7 +18,7 @@ esac
 
 DIST="$ROOT/dist/$VARIANT"
 AUDIT="$ROOT/audit/$VARIANT"
-PACKAGE="$DIST/${EXPECTED_PACKAGE}_6.1.180-1+d6301_amd64.deb"
+PACKAGE="$DIST/${EXPECTED_PACKAGE}_6.1.180-1_amd64.deb"
 FINAL_CONFIG="$AUDIT/d630-final.config"
 
 fail() {
@@ -69,7 +69,7 @@ require_file "$AUDIT/native-image-build.log"
 
 echo "=== Verify Debian package identity ==="
 [[ "$(dpkg-deb -f "$PACKAGE" Package)" == "$EXPECTED_PACKAGE" ]] || fail "unexpected package name"
-[[ "$(dpkg-deb -f "$PACKAGE" Version)" == "6.1.180-1+d6301" ]] || fail "unexpected package version"
+[[ "$(dpkg-deb -f "$PACKAGE" Version)" == "6.1.180-1" ]] || fail "unexpected package version"
 [[ "$(dpkg-deb -f "$PACKAGE" Architecture)" == "amd64" ]] || fail "unexpected package architecture"
 grep -Fqx "Kernel release: $EXPECTED_RELEASE" "$DIST/BUILD-REPORT.txt" || fail "build report has the wrong kernel release"
 
@@ -102,6 +102,53 @@ require_config SQUASHFS y
 require_config IWL3945 m
 require_config MODULES y
 require_config MODULE_UNLOAD y
+require_config MODULE_COMPRESS_ZSTD y
+require_config MODULE_COMPRESS_NONE n
+require_config MODULE_COMPRESS_GZIP n
+require_config MODULE_COMPRESS_XZ n
+require_config AUTOFS4_FS y
+require_config AUTOFS_FS y
+require_config FUSE_FS m
+require_config CUSE m
+require_config OVERLAY_FS m
+require_config EFI y
+require_config EFIVAR_FS m
+require_config XFS_FS m
+require_config F2FS_FS m
+require_config EROFS_FS m
+require_config NETWORK_FILESYSTEMS y
+require_config NFS_FS m
+require_config NFS_V2 n
+require_config NFS_V3 m
+require_config NFS_V4 m
+require_config NFSD m
+require_config NFSD_V4 y
+require_config CIFS m
+require_config SMB_SERVER m
+require_config SND_USB_AUDIO m
+require_config SND_HDA_CODEC_REALTEK m
+require_config SND_SEQUENCER m
+require_config SND_RAWMIDI m
+require_config IWL4965 m
+require_config IWLWIFI m
+require_config IWLDVM m
+require_config IWLMVM m
+require_config SCSI_LOWLEVEL y
+require_config SCSI_DH y
+require_config ISCSI_TCP m
+require_config VIRTIO_MENU y
+require_config VIRTIO_PCI m
+require_config VIRTIO_BLK m
+require_config VIRTIO_NET m
+require_config VIRTIO_CONSOLE m
+require_config VIRTIO_BALLOON m
+require_config VIRTIO_INPUT m
+require_config VIRTIO_MMIO m
+require_config DRM_VIRTIO_GPU m
+require_config VIRTIO_FS m
+require_config XEN y
+require_config XEN_PVHVM_GUEST y
+require_config XEN_PVH y
 require_config PREEMPT_RT "$EXPECTED_RT"
 
 if grep -Eiq 'warning: override:|changes choice state' \
@@ -116,6 +163,21 @@ grep -Fqx 'CONFIG_SND_HDA_CODEC_SIGMATEL=m' "$FINAL_CONFIG" || fail "Sigmatel co
 echo "=== Verify boot image, module payload and checksums ==="
 dpkg-deb -c "$PACKAGE" | grep -F "/boot/vmlinuz-$EXPECTED_RELEASE" >/dev/null || fail "kernel image for $EXPECTED_RELEASE is absent"
 dpkg-deb -c "$PACKAGE" | grep -F "/lib/modules/$EXPECTED_RELEASE/" >/dev/null || fail "kernel modules for $EXPECTED_RELEASE are absent"
+ZSTD_MODULES="$(dpkg-deb -c "$PACKAGE" | grep -Ec '/[^/]+\.ko\.zst
+grep -Fqx "PASS" "$DIST/CONFIG-AUDIT-ERRORS.txt" || fail "release audit error report is not PASS"
+(cd "$DIST" && sha256sum --check SHA256SUMS)
+
+echo "PASS: package metadata, firmware, effective config, kernel modules, and checksums validated for $VARIANT."
+ || true)"
+[[ "$ZSTD_MODULES" =~ ^[0-9]+$ ]] && (( ZSTD_MODULES > 0 )) || fail "no Zstandard-compressed kernel modules found"
+if dpkg-deb -c "$PACKAGE" | grep -E '/[^/]+\.ko(\.(gz|xz))?
+grep -Fqx "PASS" "$DIST/CONFIG-AUDIT-ERRORS.txt" || fail "release audit error report is not PASS"
+(cd "$DIST" && sha256sum --check SHA256SUMS)
+
+echo "PASS: package metadata, firmware, effective config, kernel modules, and checksums validated for $VARIANT."
+ >/dev/null; then
+  fail "found uncompressed/GZIP/XZ module payload despite Zstandard-only policy"
+fi
 grep -Fqx "PASS" "$DIST/CONFIG-AUDIT-ERRORS.txt" || fail "release audit error report is not PASS"
 (cd "$DIST" && sha256sum --check SHA256SUMS)
 
