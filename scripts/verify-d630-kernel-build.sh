@@ -130,9 +130,15 @@ require_config SND_USB_AUDIO m
 require_config SND_HDA_CODEC_REALTEK m
 require_config SND_SEQUENCER m
 require_config SND_VIRMIDI m
+require_config SND_HWDEP m
+require_config SND_OPL3_LIB m
+require_config SND_OPL3_LIB_SEQ m
+require_config SND_SEQ_DEVICE m
+require_config SND_SEQ_DUMMY m
+require_config SND_SEQ_MIDI m
 require_config SND_SEQ_MIDI_EVENT m
 require_config SND_SEQ_VIRMIDI m
-require_config SND_SEQ_MIDI_EMUL n
+require_config SND_SEQ_MIDI_EMUL m
 require_config SND_RAWMIDI m
 require_config IWL4965 m
 require_config IWLWIFI m
