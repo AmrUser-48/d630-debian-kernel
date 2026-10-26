@@ -131,6 +131,8 @@ require_config SND_HDA_CODEC_REALTEK m
 require_config SND_SEQUENCER m
 require_config SND_VIRMIDI m
 require_config SND_HWDEP m
+require_config SND_HRTIMER m
+require_config SND_SEQ_HRTIMER_DEFAULT y
 require_config SND_OPL3_LIB m
 require_config SND_OPL3_LIB_SEQ m
 require_config SND_SEQ_DEVICE m
