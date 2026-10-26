@@ -75,7 +75,7 @@ filesystem_disabled = sorted(
 # i915, shared helpers, backlight and framebuffer-DDC support are not matched.
 gpu_prefixes = (
     "DRM_AMDGPU", "DRM_RADEON", "DRM_NOUVEAU", "DRM_NVIDIA", "DRM_VMWGFX",
-    "DRM_VIRTIO_GPU", "DRM_QXL", "DRM_GMA500", "DRM_AST", "DRM_BOCHS",
+    "DRM_QXL", "DRM_GMA500", "DRM_AST", "DRM_BOCHS",
     "DRM_CIRRUS_QEMU", "DRM_MGAG200", "DRM_TEGRA", "DRM_ROCKCHIP",
     "DRM_MESON", "DRM_EXYNOS", "DRM_OMAP", "DRM_ETNAVIV", "DRM_LIMA",
     "DRM_PANFROST", "DRM_PANTHOR", "DRM_V3D", "DRM_VC4", "DRM_IMX",
