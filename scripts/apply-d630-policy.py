@@ -36,10 +36,9 @@ overlay_values = parse_config_text(overlay_text)
 sound_keep = {
     "SND", "SND_DRIVERS", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_PCI",
     "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CODEC_REALTEK",
-    "SND_USB", "SND_SEQ_DUMMY", "SND_SEQ_MIDI", "SND_SEQ_MIDI_EMUL",
+    "SND_USB", "SND_SEQ_DUMMY", "SND_SEQ_MIDI",
     "SND_SEQ_MIDI_EVENT", "SND_SEQ_VIRMIDI", "SND_VIRMIDI",
     "SND_HWDEP", "SND_HRTIMER", "SND_SEQ_HRTIMER_DEFAULT",
-    "SND_OPL3_LIB", "SND_OPL3_LIB_SEQ",
     "SND_HDA_CORE", "SND_HDA_COMPONENT", "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS",
     "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
     "SND_JACK", "SND_CTL_LED", "SND_VMASTER", "SND_USB", "SND_USB_AUDIO",
@@ -48,9 +47,9 @@ sound_keep = {
 required_sound_keep = {
     "SND_DRIVERS", "SND_PCI", "SND_HDA", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL",
     "SND_HDA_CODEC_REALTEK", "SND_USB_AUDIO", "SND_SEQUENCER", "SND_RAWMIDI",
-    "SND_VIRMIDI", "SND_SEQ_DUMMY", "SND_SEQ_MIDI", "SND_SEQ_MIDI_EMUL",
+    "SND_VIRMIDI", "SND_SEQ_DUMMY", "SND_SEQ_MIDI",
     "SND_SEQ_VIRMIDI", "SND_SEQ_MIDI_EVENT", "SND_HWDEP", "SND_HRTIMER",
-    "SND_SEQ_HRTIMER_DEFAULT", "SND_OPL3_LIB", "SND_OPL3_LIB_SEQ",
+    "SND_SEQ_HRTIMER_DEFAULT",
 }
 if not required_sound_keep.issubset(sound_keep):
     raise SystemExit("Audio policy is missing required HDA dependencies: " + ", ".join(sorted(required_sound_keep - sound_keep)))
