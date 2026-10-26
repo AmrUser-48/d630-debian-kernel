@@ -125,6 +125,7 @@ require_config NFSD m
 require_config NFSD_V4 n
 require_config CIFS m
 require_config SMB_SERVER m
+require_config SND_USB y
 require_config SND_USB_AUDIO m
 require_config SND_HDA_CODEC_REALTEK m
 require_config SND_SEQUENCER m
@@ -149,6 +150,7 @@ require_config VIRTIO_FS m
 require_config XEN y
 require_config XEN_PVHVM_GUEST y
 require_config XEN_PVH y
+require_config HVC_XEN y
 require_config PREEMPT_RT "$EXPECTED_RT"
 
 if grep -Eiq 'warning: override:|changes choice state' \

@@ -36,9 +36,10 @@ overlay_values = parse_config_text(overlay_text)
 sound_keep = {
     "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_PCI",
     "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CODEC_REALTEK",
+    "SND_USB", "SND_SEQ_MIDI_EMUL", "SND_SEQ_VIRMIDI",
     "SND_HDA_CORE", "SND_HDA_COMPONENT", "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS",
     "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
-    "SND_JACK", "SND_CTL_LED", "SND_VMASTER", "SND_USB_AUDIO",
+    "SND_JACK", "SND_CTL_LED", "SND_VMASTER", "SND_USB", "SND_USB_AUDIO",
     "SND_SEQUENCER", "SND_SEQ_DEVICE", "SND_RAWMIDI",
 }
 required_sound_keep = {
@@ -154,6 +155,11 @@ for parent, prefixes in parent_disable.items():
 unused_hardware = {
     "ALTERA_STAPL", "DEVFREQ_GOV_SIMPLE_ONDEMAND", "MXM_WMI", "SLIMBUS",
     "VIDEO_CS3308", "VIDEO_CS5345",
+    # Fibre Channel/FCoE stacks and legacy PCMCIA SCSI adapters are not part of this laptop target.
+    "FCOE", "FCOE_FNIC", "FUSION_FC", "FUSION_LAN", "LIBFC", "LIBFCOE",
+    "PCMCIA_AHA152X", "PCMCIA_QLOGIC", "PCMCIA_SYM53C500", "QEDF",
+    "SCSI_BFA_FC", "SCSI_BNX2X_FCOE", "SCSI_CHELSIO_FCOE", "SCSI_LPFC",
+    "SCSI_QLA_FC", "TCM_FC", "TCM_QLA2XXX",
 }
 unused_hardware.update(s for s in symbols if s.startswith("MEDIA_TUNER_"))
 unused_hardware_disabled = sorted(
@@ -193,6 +199,7 @@ policy_reasons: dict[str, str] = {}
 for group, values in (
     ("unused sound", sound_disabled), ("unused filesystem", filesystem_disabled),
     ("unrelated GPU", gpu_disabled), ("disabled parent dependency", sorted(set(child_disabled))),
+    ("unused D630 hardware/media driver", unused_hardware_disabled),
 ):
     for symbol in values:
         policy_reasons.setdefault(symbol, group)

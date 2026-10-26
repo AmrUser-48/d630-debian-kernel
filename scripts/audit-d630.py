@@ -38,7 +38,7 @@ required = {
     "MODULES": "y", "MODULE_UNLOAD": "y", "DEBUG_INFO_NONE": "y", "DEBUG_INFO": "n",
     "KERNEL_XZ": "y",
     "MODULE_COMPRESS_NONE": "n", "MODULE_COMPRESS_GZIP": "n",
-    "MODULE_COMPRESS_XZ": "n", "MODULE_COMPRESS_ZSTD": "y",
+    "MODULE_COMPRESS_XZ": "n", "MODULE_COMPRESS_ZSTD": "y", "SND_USB": "y",
     "AUTOFS4_FS": "y", "AUTOFS_FS": "y", "FUSE_FS": "m", "CUSE": "m",
     "OVERLAY_FS": "m", "EFI": "y", "EFIVAR_FS": "m",
     "XFS_FS": "m", "F2FS_FS": "m", "EROFS_FS": "m",
@@ -65,7 +65,7 @@ required = {
     "SND_PCM_TIMER": "y", "SND_TIMER": "m", "SND_HDA_CORE": "m",
     "SND_HDA_GENERIC": "m", "SND_PCM": "m",
     "SND_HDA_INTEL": "m", "SND_HDA_CODEC_SIGMATEL": "m",
-    "SND_HDA_CODEC_REALTEK": "m", "SND_USB_AUDIO": "m",
+    "SND_HDA_CODEC_REALTEK": "m", "SND_USB": "y", "SND_USB_AUDIO": "m",
     "SND_SEQUENCER": "m", "SND_RAWMIDI": "m",
     "SCSI_LOWLEVEL": "y", "SCSI_DH": "y",
     "SCSI_DH_ALUA": "m", "SCSI_DH_EMC": "m", "SCSI_DH_HP_SW": "m",
@@ -78,7 +78,7 @@ required = {
     "VIRTIO_INPUT": "m", "VIRTIO_MMIO": "m", "DRM_VIRTIO_GPU": "m",
     "VIRTIO_FS": "m", "XEN": "y", "XEN_PVHVM_GUEST": "y",
     "XEN_PVH": "y", "XEN_BLKDEV_FRONTEND": "m",
-    "XEN_NETDEV_FRONTEND": "m", "XEN_SCSI_FRONTEND": "m", "HVC_XEN": "m",
+    "XEN_NETDEV_FRONTEND": "m", "XEN_SCSI_FRONTEND": "m", "HVC_XEN": "y",
     "DVB_CORE": "n", "MEDIA_DIGITAL_TV_SUPPORT": "n",
     "MEDIA_RADIO_SUPPORT": "n", "MEDIA_SDR_SUPPORT": "n", "MEDIA_TEST_SUPPORT": "n",
     "CAN": "n", "ISDN": "n", "INFINIBAND": "n", "FIREWIRE": "n",
@@ -118,8 +118,8 @@ if policy_file.is_file():
 
 sound_keep = {
     "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_HDA_INTEL",
-    "SND_PCI", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CODEC_REALTEK", "SND_USB_AUDIO",
-    "SND_SEQUENCER", "SND_SEQ_DEVICE", "SND_RAWMIDI", "SND_HDA_CORE", "SND_HDA_COMPONENT",
+    "SND_PCI", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CODEC_REALTEK", "SND_USB", "SND_USB_AUDIO",
+    "SND_SEQ_MIDI_EMUL", "SND_SEQ_VIRMIDI", "SND_SEQUENCER", "SND_SEQ_DEVICE", "SND_RAWMIDI", "SND_HDA_CORE", "SND_HDA_COMPONENT",
     "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS", "SND_INTEL_DSP_CONFIG",
     "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE", "SND_JACK", "SND_CTL_LED", "SND_VMASTER",
 }
