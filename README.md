@@ -20,7 +20,7 @@ The build starts from Debian's generated amd64 settings, then applies explicit D
 
 CPU scaling is mandatory: `CONFIG_CPU_FREQ=y`, `CONFIG_CPU_FREQ_GOV_USERSPACE=y` and `CONFIG_X86_ACPI_CPUFREQ=m`. zram remains built in with LZ4 as its default compressor. Core 2 microcode and Intel 3945ABG firmware are embedded; the official firmware packages and license/copyright notices are included in the release bundle.
 
-The pruning policy disables unrelated GPU vendors, NVMe, tuner/DVB/radio/SDR/test-media drivers and unrelated bus/protocol modules. Selected SCSI/iSCSI handlers, common RAID/SAS adapters, VirtIO devices and Xen guest drivers remain modular. Installed modules are Zstandard-compressed as `.ko.zst`. Deliberate removals are recorded. Unexplained enabled-module-to-disabled transitions fail validation.
+The pruning policy disables unrelated GPU vendors, NVMe, tuner/DVB/radio/SDR/test-media drivers, and unselected legacy SCSI controllers while retaining the explicitly selected storage adapters. Selected SCSI/iSCSI handlers, common RAID/SAS adapters, VirtIO devices and Xen guest drivers remain modular. Kernel modules stay as plain `.ko` files inside a Debian package compressed with XZ; this prioritizes a smaller downloadable `.deb` over compressed on-disk module storage. Deliberate removals are recorded. Unexplained enabled-module-to-disabled transitions fail validation.
 
 ## Build and release gates
 

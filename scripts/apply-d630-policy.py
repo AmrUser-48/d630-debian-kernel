@@ -165,6 +165,32 @@ unused_hardware = {
     "SCSI_BFA_FC", "SCSI_BNX2X_FCOE", "SCSI_CHELSIO_FCOE", "SCSI_LPFC",
     "SCSI_QLA_FC", "TCM_FC", "TCM_QLA2XXX",
 }
+# SCSI_LOWLEVEL must stay enabled for the explicitly selected HPSA/AACRAID,
+# Adaptec, MegaRAID, MPT2/3SAS and SmartPQI modules. Prune other legacy
+# controllers instead of inheriting every Debian default module through parent.
+scsi_legacy_adapters = {
+    "BE2ISCSI", "CHELSIO_LIB", "FUSION_CTL", "FUSION_SAS", "FUSION_SPI",
+    "ISCSI_BOOT_SYSFS", "ISCSI_IBFT", "ISCSI_TARGET", "ISCSI_TARGET_CXGB4",
+    "MEGARAID_LEGACY", "MEGARAID_MAILBOX", "MEGARAID_MM", "QEDI",
+    "SCSI_3W_9XXX", "SCSI_3W_SAS", "SCSI_ACARD", "SCSI_ADVANSYS",
+    "SCSI_AIC94XX", "SCSI_AM53C974", "SCSI_ARCMSR", "SCSI_BNX2_ISCSI",
+    "SCSI_BUSLOGIC", "SCSI_CXGB3_ISCSI", "SCSI_CXGB4_ISCSI", "SCSI_DC395x",
+    "SCSI_DMX3191D", "SCSI_ESAS2R", "SCSI_HPTIOP", "SCSI_INIA100",
+    "SCSI_INITIO", "SCSI_IPR", "SCSI_IPS", "SCSI_ISCI", "SCSI_MPI3MR",
+    "SCSI_MVSAS", "SCSI_MVUMI", "SCSI_MYRB", "SCSI_MYRS", "SCSI_PM8001",
+    "SCSI_PMCRAID", "SCSI_QLA_ISCSI", "SCSI_QLOGIC_1280", "SCSI_SNIC",
+    "SCSI_STEX", "SCSI_SYM53C8XX_2", "SCSI_WD719X",
+}
+selected_scsi_conflicts = sorted(
+    symbol for symbol in scsi_legacy_adapters
+    if overlay_values.get(symbol, "n") in {"y", "m"}
+)
+if selected_scsi_conflicts:
+    raise SystemExit(
+        "SCSI prune list conflicts with explicitly selected overlay modules: "
+        + ", ".join(selected_scsi_conflicts)
+    )
+unused_hardware.update(scsi_legacy_adapters)
 unused_hardware.update(s for s in symbols if s.startswith("MEDIA_TUNER_"))
 unused_hardware_disabled = sorted(
     s for s in unused_hardware if baseline.get(s, "n") in {"y", "m"}

@@ -387,7 +387,7 @@ require_module scsi_dh_rdac SCSI_DH_RDAC
 
 DEB_NAME="$NEW_PACKAGE"_"$IMAGE_VERSION"_amd64.deb
 DEB_OUTPUT="$DIST/$DEB_NAME"
-dpkg-deb --build --root-owner-group "$REPACK" "$DEB_OUTPUT"
+dpkg-deb --build --root-owner-group -Zxz -z6 "$REPACK" "$DEB_OUTPUT"
 test "$(dpkg-deb -f "$DEB_OUTPUT" Package)" = "$NEW_PACKAGE"
 test "$(dpkg-deb -f "$DEB_OUTPUT" Version)" = "$IMAGE_VERSION"
 test "$(dpkg-deb -f "$DEB_OUTPUT" Architecture)" = amd64
@@ -423,7 +423,7 @@ cat > "$DIST/RELEASE-NOTES.md" <<EOF
 - Binary package: $NEW_PACKAGE, version $IMAGE_VERSION, amd64.
 - CPU target: Intel Core 2 Duo T7250, selected through CONFIG_MCORE2.
 - Built-in: autofs, zram (default LZ4, with LZO-RLE, Zstd, LZ4, LZO, LZ4HC and 842 compressors enabled); ext4, Btrfs, NTFS3, FAT/VFAT/exFAT, UDF and SquashFS with zlib/LZ4/LZO/XZ/Zstd support; MSR and CPUID; early Intel CPU microcode and Intel 3945ABG firmware.
-- Optional modules: FUSE/CUSE, overlayfs, EFI variables, XFS/F2FS/EROFS, NFS/NFSD, CIFS/SMB server, USB audio, Realtek HDA, MIDI sequencer, Intel 4965/newer Wi-Fi, VirtIO and selected SCSI/iSCSI drivers. Installed modules are Zstandard-compressed (`.ko.zst`).
+- Optional modules: FUSE/CUSE, overlayfs, EFI variables, XFS/F2FS/EROFS, NFS/NFSD, CIFS/SMB server, USB audio, Realtek HDA, MIDI sequencer, Intel 4965/newer Wi-Fi, VirtIO and selected SCSI/iSCSI drivers. Modules remain uncompressed `.ko` files; the complete Debian package uses XZ compression to keep the download compact.
 - Loadable D630 drivers retained: Intel i915 where Debian's baseline selects it as a module, Intel 3945ABG Wi-Fi, Intel HDA/Sigmatel audio and PS/2 touchpad.
 - CPU frequency scaling: ACPI P-state driver plus the built-in userspace governor.
 - The official firmware-iwlwifi and intel-microcode .debs plus the final config and audit reports accompany the image.
@@ -441,7 +441,7 @@ EOF
   echo "Version: $(dpkg-deb -f "$DEB_OUTPUT" Version)"
   echo "Architecture: $(dpkg-deb -f "$DEB_OUTPUT" Architecture)"
   echo "Default zram compressor: LZ4; all Linux 6.1 zram compressors enabled"
-  echo "Installed kernel modules compressed with Zstandard (.ko.zst)"
+  echo "Kernel modules stored as uncompressed .ko files; .deb uses XZ archive compression"
   echo "CPU frequency: ACPI P-state driver and userspace governor enabled"
   echo "Filesystems: ext4, Btrfs, NTFS3, FUSE/NTFS-3G, autofs (built-in), overlayfs, XFS, F2FS, EROFS, FAT/VFAT/exFAT, UDF, SquashFS; NFS and CIFS/SMB network filesystems"
   echo "Embedded firmware: Intel T7250 microcode and Intel 3945ABG firmware"

@@ -103,10 +103,10 @@ require_config SQUASHFS y
 require_config IWL3945 m
 require_config MODULES y
 require_config MODULE_UNLOAD y
-require_config MODULE_COMPRESS_ZSTD y
-require_config MODULE_COMPRESS_NONE n
+require_config MODULE_COMPRESS_NONE y
 require_config MODULE_COMPRESS_GZIP n
 require_config MODULE_COMPRESS_XZ n
+require_config MODULE_COMPRESS_ZSTD n
 require_config AUTOFS4_FS y
 require_config AUTOFS_FS y
 require_config FUSE_FS m
@@ -176,10 +176,22 @@ echo "=== Verify boot image, module payload and checksums ==="
 dpkg-deb -c "$PACKAGE" | grep -F "/boot/vmlinuz-$EXPECTED_RELEASE" >/dev/null || fail "kernel image for $EXPECTED_RELEASE is absent"
 dpkg-deb -c "$PACKAGE" | grep -F "/lib/modules/$EXPECTED_RELEASE/" >/dev/null || fail "kernel modules for $EXPECTED_RELEASE are absent"
 
-ZSTD_MODULES="$(dpkg-deb -c "$PACKAGE" | grep -Ec '/[^/]+\.ko\.zst$' || true)"
-[[ "$ZSTD_MODULES" =~ ^[0-9]+$ ]] && (( ZSTD_MODULES > 0 )) || fail "no Zstandard-compressed kernel modules found"
-if dpkg-deb -c "$PACKAGE" | grep -E '/[^/]+\.ko(\.(gz|xz))?$' >/dev/null; then
-  fail "found uncompressed/GZIP/XZ module payload despite Zstandard-only policy"
+PLAIN_MODULES="$(dpkg-deb -c "$PACKAGE" | grep -Ec '/[^/]+\.ko
+
+grep -Fqx "PASS" "$DIST/CONFIG-AUDIT-ERRORS.txt" || fail "release audit error report is not PASS"
+(cd "$DIST" && sha256sum --check SHA256SUMS)
+
+echo "PASS: package metadata, firmware, effective config, kernel modules, and checksums validated for $VARIANT."
+ || true)"
+[[ "$PLAIN_MODULES" =~ ^[0-9]+$ ]] && (( PLAIN_MODULES > 0 )) || fail "no uncompressed kernel modules found"
+if dpkg-deb -c "$PACKAGE" | grep -E '/[^/]+\.ko\.(gz|xz|zst)
+
+grep -Fqx "PASS" "$DIST/CONFIG-AUDIT-ERRORS.txt" || fail "release audit error report is not PASS"
+(cd "$DIST" && sha256sum --check SHA256SUMS)
+
+echo "PASS: package metadata, firmware, effective config, kernel modules, and checksums validated for $VARIANT."
+ >/dev/null; then
+  fail "found compressed module payload despite the plain-.ko policy"
 fi
 
 grep -Fqx "PASS" "$DIST/CONFIG-AUDIT-ERRORS.txt" || fail "release audit error report is not PASS"
