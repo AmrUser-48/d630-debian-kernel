@@ -34,7 +34,7 @@ overlay_values = parse_config_text(overlay_text)
 # Retain HDA/Sigmatel, USB audio, MIDI sequencer core, and the virtual MIDI driver.
 # Hidden MIDI helper modules remain enabled only when a retained driver selects them.
 sound_keep = {
-    "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_PCI",
+    "SND", "SND_DRIVERS", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_PCI",
     "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CODEC_REALTEK",
     "SND_USB", "SND_SEQ_DUMMY", "SND_SEQ_MIDI", "SND_SEQ_MIDI_EMUL",
     "SND_SEQ_MIDI_EVENT", "SND_SEQ_VIRMIDI", "SND_VIRMIDI",
@@ -46,7 +46,7 @@ sound_keep = {
     "SND_SEQUENCER", "SND_SEQ_DEVICE", "SND_RAWMIDI",
 }
 required_sound_keep = {
-    "SND_PCI", "SND_HDA", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL",
+    "SND_DRIVERS", "SND_PCI", "SND_HDA", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL",
     "SND_HDA_CODEC_REALTEK", "SND_USB_AUDIO", "SND_SEQUENCER", "SND_RAWMIDI",
     "SND_VIRMIDI", "SND_SEQ_DUMMY", "SND_SEQ_MIDI", "SND_SEQ_MIDI_EMUL",
     "SND_SEQ_VIRMIDI", "SND_SEQ_MIDI_EVENT", "SND_HWDEP", "SND_HRTIMER",

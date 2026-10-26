@@ -81,6 +81,7 @@ require_config CPU_FREQ_GOV_USERSPACE y
 require_config X86_ACPI_CPUFREQ m
 require_config SOUND y
 require_config SND y
+require_config SND_DRIVERS y
 require_config SND_PCI y
 require_config SND_HDA m
 require_config SND_PCM_TIMER y

@@ -61,7 +61,7 @@ required = {
     "WLAN": "y", "CFG80211": "m", "MAC80211": "m", "RFKILL": "y",
     "IWLEGACY": "m", "IWL3945": "m", "IWL4965": "m",
     "IWLWIFI": "m", "IWLDVM": "m", "IWLMVM": "m",
-    "SOUND": "y", "SND": "y", "SND_PCI": "y", "SND_HDA": "m",
+    "SOUND": "y", "SND": "y", "SND_DRIVERS": "y", "SND_PCI": "y", "SND_HDA": "m",
     "SND_PCM_TIMER": "y", "SND_TIMER": "m", "SND_HDA_CORE": "m",
     "SND_HDA_GENERIC": "m", "SND_PCM": "m",
     "SND_HDA_INTEL": "m", "SND_HDA_CODEC_SIGMATEL": "m",
@@ -121,7 +121,7 @@ if policy_file.is_file():
             policy_symbols.add(line.split("\t", 1)[0])
 
 sound_keep = {
-    "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_HDA_INTEL",
+    "SND", "SND_DRIVERS", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_HDA_INTEL",
     "SND_PCI", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CODEC_REALTEK", "SND_USB", "SND_USB_AUDIO",
     "SND_SEQ_DUMMY", "SND_SEQ_MIDI", "SND_SEQ_MIDI_EMUL", "SND_SEQ_MIDI_EVENT",
     "SND_VIRMIDI", "SND_SEQ_VIRMIDI", "SND_SEQUENCER", "SND_SEQ_DEVICE", "SND_RAWMIDI",
