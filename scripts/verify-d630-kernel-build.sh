@@ -122,7 +122,7 @@ require_config NFS_V2 n
 require_config NFS_V3 m
 require_config NFS_V4 m
 require_config NFSD m
-require_config NFSD_V4 y
+require_config NFSD_V4 n
 require_config CIFS m
 require_config SMB_SERVER m
 require_config SND_USB_AUDIO m

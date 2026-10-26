@@ -43,7 +43,7 @@ required = {
     "OVERLAY_FS": "m", "EFI": "y", "EFIVAR_FS": "m",
     "XFS_FS": "m", "F2FS_FS": "m", "EROFS_FS": "m",
     "NETWORK_FILESYSTEMS": "y", "NFS_FS": "m", "NFS_V2": "n",
-    "NFS_V3": "m", "NFS_V4": "m", "NFSD": "m", "NFSD_V4": "y",
+    "NFS_V3": "m", "NFS_V4": "m", "NFSD": "m", "NFSD_V4": "n",
     "CIFS": "m", "SMB_SERVER": "m",
     "EXT4_FS": "y", "BTRFS_FS": "y", "NTFS3_FS": "y", "NTFS3_LZX_XPRESS": "y",
     "FAT_FS": "y", "MSDOS_FS": "y", "VFAT_FS": "y", "EXFAT_FS": "y", "UDF_FS": "y",
@@ -173,7 +173,7 @@ parent_prefixes = {
                       "SUN3X_ESP", "JAZZ_ESP", "QEDI", "BE2ISCSI", "MEGARAID_",
                       "LIBCXGBI", "CXGB"),
     "MTD": ("MTD", "FTL", "INFTL", "NFTL", "RFD_FTL", "SSFDC", "JFFS2_FS", "UBIFS_FS", "BCH"),
-    "XEN": ("XEN",), "VIRTIO": ("VIRTIO_",),
+    "XEN": ("XEN",), "VIRTIO_MENU": ("VIRTIO_",),
 }
 core_scsi = {
     "SCSI", "SCSI_MOD", "SCSI_COMMON", "SCSI_DMA", "SCSI_NETLINK", "SCSI_PROC_FS",

@@ -377,8 +377,8 @@ require_module virtio_blk VIRTIO_BLK
 require_module virtio_net VIRTIO_NET
 require_module virtio_console VIRTIO_CONSOLE
 require_module virtio_balloon VIRTIO_BALLOON
-require_module virtio_gpu DRM_VIRTIO_GPU
-require_module virtio_fs VIRTIO_FS
+require_module virtio-gpu DRM_VIRTIO_GPU
+require_module virtiofs VIRTIO_FS
 require_module iscsi_tcp ISCSI_TCP
 require_module scsi_dh_alua SCSI_DH_ALUA
 require_module scsi_dh_emc SCSI_DH_EMC
