@@ -29,14 +29,13 @@ if not rules_path.is_file() or not overlay.is_file():
 baseline = read_config(baseline_path)
 symbols = set(baseline)
 overlay_text = overlay.read_text(encoding="utf-8").rstrip()
-overlay_values = parse_config_text(overlay_text)
 
-# Retain HDA/Sigmatel plus USB audio, Realtek codecs, and MIDI sequencer support.
-# Keep SND_SEQ_* dependencies when the sequencer is enabled.
+# Retain HDA/Sigmatel, USB audio, MIDI sequencer core, and the virtual MIDI driver.
+# Hidden MIDI helper modules remain enabled only when a retained driver selects them.
 sound_keep = {
     "SND", "SND_TIMER", "SND_PCM_TIMER", "SND_PCM", "SND_HDA", "SND_PCI",
     "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL", "SND_HDA_CODEC_REALTEK",
-    "SND_USB", "SND_SEQ_MIDI_EMUL", "SND_SEQ_VIRMIDI",
+    "SND_USB", "SND_SEQ_VIRMIDI", "SND_SEQ_MIDI_EVENT", "SND_VIRMIDI",
     "SND_HDA_CORE", "SND_HDA_COMPONENT", "SND_HDA_GENERIC", "SND_HDA_GENERIC_LEDS",
     "SND_INTEL_DSP_CONFIG", "SND_DMAENGINE_PCM", "SND_PCM_DMAENGINE",
     "SND_JACK", "SND_CTL_LED", "SND_VMASTER", "SND_USB", "SND_USB_AUDIO",
@@ -45,13 +44,13 @@ sound_keep = {
 required_sound_keep = {
     "SND_PCI", "SND_HDA", "SND_HDA_INTEL", "SND_HDA_CODEC_SIGMATEL",
     "SND_HDA_CODEC_REALTEK", "SND_USB_AUDIO", "SND_SEQUENCER", "SND_RAWMIDI",
+    "SND_VIRMIDI", "SND_SEQ_VIRMIDI", "SND_SEQ_MIDI_EVENT",
 }
 if not required_sound_keep.issubset(sound_keep):
     raise SystemExit("Audio policy is missing required HDA dependencies: " + ", ".join(sorted(required_sound_keep - sound_keep)))
 
 sound_disabled = sorted(
     s for s in symbols if s.startswith(("SND_", "SOUNDWIRE_")) and s not in sound_keep
-    and not (s.startswith("SND_SEQ_") and overlay_values.get("SND_SEQUENCER", "n") in {"m", "y"})
     and baseline.get(s, "n") in {"y", "m"}
 )
 
@@ -172,7 +171,7 @@ all_disabled = sorted(set(
 generated = overlay_text + "\n"
 generated += "\n# Standard Debian amd64 runtime kernel; PREEMPT_RT is disabled.\n"
 generated += "# CONFIG_PREEMPT_RT is not set\n"
-generated += "\n# D630 audio trim: keep HDA + Sigmatel, disable other sound devices.\n"
+generated += "\n# D630 audio trim: retain HDA, USB audio, sequencer, and virtual MIDI.\n"
 generated += "".join(f"# CONFIG_{s} is not set\n" for s in sound_disabled)
 generated += "\n# D630 filesystem trim: disable unneeded filesystem implementations.\n"
 generated += "".join(f"# CONFIG_{s} is not set\n" for s in filesystem_disabled)
