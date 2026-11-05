@@ -2,7 +2,7 @@
 
 Build Debian Bookworm Linux source package `6.1.180-1` on an Ubuntu x86_64 runner, using the repository's stripped `config/config.thin` and Kbuild's `bindeb-pkg` target. This route does not use Docker.
 
-**This is a direct upstream-Kbuild package build, not the repository's Debian `debian/rules.gen` CI build.** It produces kernel release `6.1.180-d630-core2`; it does not produce the CI package ABI `6.1.0-52-d630-core2` or run the CI audit/repackaging pipeline.
+**This is a direct upstream-Kbuild package build, not the repository's Debian `debian/rules.gen` CI build.** The guide below shows how to give the native build the requested kernel release and package name `6.1.0-52-d630-core2`, while keeping the actual Debian source package version `6.1.180-1`. This matches the kernel release string and image package name, but does not run Debian's ABI-generation or the repository CI audit/repackaging pipeline.
 
 The commands below use the runner workspace `/home/runner/d630-kernel` and a four-vCPU runner.
 
@@ -108,14 +108,11 @@ The stripped configuration must retain:
 - ZRAM and the requested compressor implementations/default.
 - `CONFIG_LOCALVERSION=""` and `# CONFIG_LOCALVERSION_AUTO is not set`.
 
-Check the important values:
+Check the important config values before setting the release override:
 
 ```bash
 grep -E '^(CONFIG_MCORE2=y|# CONFIG_GENERIC_CPU is not set|CONFIG_LOCALVERSION=|CONFIG_ZRAM=|CONFIG_ZRAM_DEF_COMP=|CONFIG_SND_HDA_INTEL=|CONFIG_SND_HDA_CODEC_SIGMATEL=)' .config
-make -s kernelrelease
 ```
-
-Expected kernel release: `6.1.180-d630-core2`.
 
 ## 4. Set the exact build flags
 
@@ -133,13 +130,37 @@ export LOCALVERSION="-d630-core2"
 
 Keep `CONFIG_MCORE2=y` in `.config`; the explicit `KCFLAGS` is retained as requested.
 
+### Set the Debian-style kernel release
+
+The source tree is still Debian Linux `6.1.180-1`. To make Kbuild name the kernel release and image package `6.1.0-52-d630-core2`, override the kernel Makefile version fields at build time. Keep the `LOCALVERSION` export above:
+
+```bash
+make VERSION=6 PATCHLEVEL=1 SUBLEVEL=0 EXTRAVERSION=-52 -s kernelrelease
+```
+
+Expected output:
+
+```text
+6.1.0-52-d630-core2
+```
+
+These Make variables change release and package naming only; they do **not** change the source code from Linux `6.1.180` to `6.1.0`. `KDEB_PKGVERSION` is a separate Debian binary-package version and remains `6.1.180-1`.
+
 ## 5. Build Debian binary packages
 
 The runner has four vCPUs; use four parallel jobs:
 
 ```bash
-make -j4 KDEB_PKGVERSION=6.1.180-1 bindeb-pkg
+make -j4 VERSION=6 PATCHLEVEL=1 SUBLEVEL=0 EXTRAVERSION=-52 KDEB_PKGVERSION=6.1.180-1 bindeb-pkg
 ```
+
+The expected image package is:
+
+```text
+linux-image-6.1.0-52-d630-core2_6.1.180-1_amd64.deb
+```
+
+The installed kernel release and module directory are `6.1.0-52-d630-core2`. Kbuild derives the `linux-image-...` package name from `KERNELRELEASE`; `KDEB_PKGVERSION=6.1.180-1` sets the Debian package version, not the kernel release.
 
 The package build runs from `/home/runner/d630-kernel/source/linux`. Kbuild places the resulting `.deb` files in the parent directory:
 
@@ -147,10 +168,10 @@ The package build runs from `/home/runner/d630-kernel/source/linux`. Kbuild plac
 ls -lh /home/runner/d630-kernel/source/*.deb
 ```
 
-The image/module release is `6.1.180-d630-core2`. Keep the currently working kernel and boot entry until the new package has been installed and tested on the D630.
+Keep the currently working kernel and boot entry until the new package has been installed and tested on the D630.
 
 ## Important distinction from the CI build
 
 Do not run `scripts/build-d630-kernel.sh` as an Ubuntu-host build recipe. That script is designed for the repository's disposable Debian Bookworm build environment; it changes APT source-list files and removes/recreates the repository's `build-work/amd64`, `audit/amd64` and `dist/amd64` output directories.
 
-This native guide intentionally uses `make bindeb-pkg` with the complete stripped `.config`. Its release naming and package pipeline differ from the CI workflow. The CI verifier expects `6.1.0-52-d630-core2` and is not applicable to this native `6.1.180-d630-core2` package.
+This native guide intentionally uses `make bindeb-pkg` with the complete stripped `.config`. The explicit `VERSION=6 PATCHLEVEL=1 SUBLEVEL=0 EXTRAVERSION=-52` arguments reproduce the requested release string and image package name, but they do not reproduce Debian's generated `debian/rules.gen` build environment, CI audits, or repackaging pipeline. The CI verifier is not applicable to this native package.
