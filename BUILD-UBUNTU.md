@@ -1,0 +1,124 @@
+# Native Ubuntu build guide
+
+Build Debian Bookworm Linux source package `6.1.180-1` on an Ubuntu x86_64 runner, using the repository's stripped `config/config.thin` and Kbuild's `bindeb-pkg` target. This route does not use Docker.
+
+**This is a direct upstream-Kbuild package build, not the repository's Debian `debian/rules.gen` CI build.** It produces kernel release `6.1.180-d630-core2`; it does not produce the CI package ABI `6.1.0-52-d630-core2` or run the CI audit/repackaging pipeline.
+
+The commands below use the runner workspace `/home/runner/d630-kernel` and a four-vCPU runner.
+
+## 1. Install Ubuntu build dependencies
+
+```bash
+sudo apt update
+sudo apt install -y \
+  build-essential bc bison flex \
+  libssl-dev libelf-dev libncurses-dev dwarves \
+  rsync cpio kmod fakeroot dpkg-dev \
+  python3 curl ca-certificates \
+  xz-utils zstd lz4 \
+  intel-microcode linux-firmware iucode-tool
+```
+
+The firmware packages provide the files requested by `CONFIG_EXTRA_FIRMWARE`. Check that the configured firmware paths exist before compiling:
+
+```bash
+ls -l /lib/firmware/intel-ucode/06-0f-0d
+ls -l /lib/firmware/iwlwifi-3945-2.ucode
+```
+
+## 2. Download and unpack Debian source
+
+Source package: `linux=6.1.180-1`.
+
+If the source has already been unpacked into `/home/runner/d630-kernel/source/linux`, skip this section.
+
+```bash
+mkdir -p /home/runner/d630-kernel/download
+mkdir -p /home/runner/d630-kernel/source
+cd /home/runner/d630-kernel/download
+
+curl -fL --retry 3 \
+  https://security.debian.org/debian-security/pool/updates/main/l/linux/linux_6.1.180-1.dsc \
+  -o linux_6.1.180-1.dsc
+
+curl -fL --retry 3 \
+  https://security.debian.org/debian-security/pool/updates/main/l/linux/linux_6.1.180.orig.tar.xz \
+  -o linux_6.1.180.orig.tar.xz
+
+curl -fL --retry 3 \
+  https://security.debian.org/debian-security/pool/updates/main/l/linux/linux_6.1.180-1.debian.tar.xz \
+  -o linux_6.1.180-1.debian.tar.xz
+
+dpkg-source -x \
+  /home/runner/d630-kernel/download/linux_6.1.180-1.dsc \
+  /home/runner/d630-kernel/source/linux
+```
+
+## 3. Load the stripped configuration
+
+Use the full `config.thin` file as the kernel's `.config`. Do not start from `defconfig` or Debian's generic amd64 config.
+
+```bash
+curl -fL \
+  https://raw.githubusercontent.com/AmrUser-48/d630-debian-kernel/main/config/config.thin \
+  -o /home/runner/d630-kernel/source/linux/.config
+
+cd /home/runner/d630-kernel/source/linux
+make olddefconfig
+```
+
+`olddefconfig` resolves Kconfig dependencies and choice values in the supplied stripped configuration. Review the resolved `.config` before compiling; it is the actual build input.
+
+The stripped configuration must retain:
+
+- `CONFIG_MCORE2=y` and `# CONFIG_GENERIC_CPU is not set`.
+- D630 storage, filesystem, graphics, Wi-Fi, HDA/Sigmatel, input and ACPI support.
+- ZRAM and the requested compressor implementations/default.
+- `CONFIG_LOCALVERSION=""` and `# CONFIG_LOCALVERSION_AUTO is not set`.
+
+Check the important values:
+
+```bash
+grep -E '^(CONFIG_MCORE2=y|# CONFIG_GENERIC_CPU is not set|CONFIG_LOCALVERSION=|CONFIG_ZRAM=|CONFIG_ZRAM_DEF_COMP=|CONFIG_SND_HDA_INTEL=|CONFIG_SND_HDA_CODEC_SIGMATEL=)' .config
+make -s kernelrelease
+```
+
+Expected kernel release: `6.1.180-d630-core2`.
+
+## 4. Set the exact build flags
+
+Run these exports in the same shell used for the build:
+
+```bash
+export ARCH=x86_64
+export KCFLAGS="-march=core2"
+export LOCALVERSION="-d630-core2"
+```
+
+- `ARCH=x86_64` selects the 64-bit x86 kernel target.
+- `KCFLAGS="-march=core2"` explicitly compiles kernel C code for the Intel Core 2 target.
+- `LOCALVERSION="-d630-core2"` appends the D630 identifier to the kernel release.
+
+Keep `CONFIG_MCORE2=y` in `.config`; the explicit `KCFLAGS` is retained as requested.
+
+## 5. Build Debian binary packages
+
+The runner has four vCPUs; use four parallel jobs:
+
+```bash
+make -j4 KDEB_PKGVERSION=6.1.180-1 bindeb-pkg
+```
+
+The package build runs from `/home/runner/d630-kernel/source/linux`. Kbuild places the resulting `.deb` files in the parent directory:
+
+```bash
+ls -lh /home/runner/d630-kernel/source/*.deb
+```
+
+The image/module release is `6.1.180-d630-core2`. Keep the currently working kernel and boot entry until the new package has been installed and tested on the D630.
+
+## Important distinction from the CI build
+
+Do not run `scripts/build-d630-kernel.sh` as an Ubuntu-host build recipe. That script is designed for the repository's disposable Debian Bookworm build environment; it changes APT source-list files and removes/recreates the repository's `build-work/amd64`, `audit/amd64` and `dist/amd64` output directories.
+
+This native guide intentionally uses `make bindeb-pkg` with the complete stripped `.config`. Its release naming and package pipeline differ from the CI workflow. The CI verifier expects `6.1.0-52-d630-core2` and is not applicable to this native `6.1.180-d630-core2` package.
