@@ -16,15 +16,47 @@ sudo apt install -y \
   rsync cpio kmod fakeroot dpkg-dev \
   python3 curl ca-certificates \
   xz-utils zstd lz4 \
-  intel-microcode linux-firmware iucode-tool
+  intel-microcode linux-firmware linux-firmware-intel-wireless iucode-tool
 ```
 
-The firmware packages provide the files requested by `CONFIG_EXTRA_FIRMWARE`. Check that the configured firmware paths exist before compiling:
+## Firmware required before compiling
+
+The stripped config requests built-in firmware:
+
+- `intel-ucode/06-0f-0d` — Intel microcode for the D630's T7250.
+- `iwlwifi-3945-2.ucode` — Intel PRO/Wireless 3945ABG firmware.
+
+Because `CONFIG_EXTRA_FIRMWARE_DIR="/lib/firmware"`, Kbuild requires these exact, **uncompressed** files at these paths while compiling:
+
+- `/lib/firmware/intel-ucode/06-0f-0d`
+- `/lib/firmware/iwlwifi-3945-2.ucode`
+
+Install the firmware packages:
 
 ```bash
-ls -l /lib/firmware/intel-ucode/06-0f-0d
-ls -l /lib/firmware/iwlwifi-3945-2.ucode
+sudo apt install -y intel-microcode linux-firmware-intel-wireless zstd iucode-tool
 ```
+
+Ubuntu 24.04's `linux-firmware-intel-wireless` package stores this legacy Wi-Fi blob compressed at `/lib/firmware/intel/iwlwifi/iwlwifi-3945-2.ucode.zst`. Decompress it to the exact top-level filename expected by `CONFIG_EXTRA_FIRMWARE`:
+
+```bash
+sudo mkdir -p /lib/firmware/intel-ucode
+sudo zstd -q -d -f \\
+  /lib/firmware/intel/iwlwifi/iwlwifi-3945-2.ucode.zst \\
+  -o /lib/firmware/iwlwifi-3945-2.ucode
+```
+
+Verify **both** firmware inputs before running `make`:
+
+```bash
+ls -lh \\
+  /lib/firmware/intel-ucode/06-0f-0d \\
+  /lib/firmware/iwlwifi-3945-2.ucode
+
+iucode_tool -l /lib/firmware/intel-ucode/06-0f-0d
+```
+
+The microcode listing must include CPU signature `0x000006fd` (T7250). If either `ls` path is missing, do not start the kernel build. The error `No rule to make target '/lib/firmware/intel-ucode/06-0f-0d'` means the built-in firmware input is missing; it is not a compiler or Kconfig failure. After installing/placing the files, rerun the same build command.
 
 ## 2. Download and unpack Debian source
 
