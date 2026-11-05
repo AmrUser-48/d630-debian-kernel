@@ -30,6 +30,8 @@ Artifacts and the uniquely tagged GitHub pre-release are published only after va
 
 ## Files
 
+- `BUILD-UBUNTU.md` — native Ubuntu build guide using the stripped configuration, explicit Core 2 flags and `make -j4 bindeb-pkg`.
+
 - `config/d630-core2.config` — Core 2 and D630 Kconfig overlay.
 - `scripts/apply-d630-policy.py` — applies the overlay, records intentional pruning and configures the custom release.
 - `scripts/audit-d630.py` — checks required symbols and classifies configuration changes.
