@@ -41,16 +41,16 @@ Ubuntu 24.04's `linux-firmware-intel-wireless` package stores this legacy Wi-Fi 
 
 ```bash
 sudo mkdir -p /lib/firmware/intel-ucode
-sudo zstd -q -d -f \\
-  /lib/firmware/intel/iwlwifi/iwlwifi-3945-2.ucode.zst \\
+sudo zstd -q -d -f \
+  /lib/firmware/intel/iwlwifi/iwlwifi-3945-2.ucode.zst \
   -o /lib/firmware/iwlwifi-3945-2.ucode
 ```
 
 Verify **both** firmware inputs before running `make`:
 
 ```bash
-ls -lh \\
-  /lib/firmware/intel-ucode/06-0f-0d \\
+ls -lh \
+  /lib/firmware/intel-ucode/06-0f-0d \
   /lib/firmware/iwlwifi-3945-2.ucode
 
 iucode_tool -l /lib/firmware/intel-ucode/06-0f-0d
