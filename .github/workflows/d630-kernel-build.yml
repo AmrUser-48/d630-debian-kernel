@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - ".github/workflows/**"
-      - "config/d630-core2.config"
+      - "config/config.thin"
       - "scripts/**"
   workflow_dispatch:
 
