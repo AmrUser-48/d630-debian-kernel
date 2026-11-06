@@ -28,6 +28,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Fetch Debian 12 user configurations
+        run: |
+          set -Eeuo pipefail
+          git clone --depth=1 --single-branch --branch main \
+            https://github.com/AmrUser-48/deb12dots.git "$RUNNER_TEMP/deb12dots"
+          echo "Debian user configuration revision: $(git -C "$RUNNER_TEMP/deb12dots" rev-parse HEAD)"
+
       - name: Install build and interactive tools
         env:
           SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
@@ -58,6 +65,7 @@ jobs:
             openssh-server mosh \
             git gh \
             neovim lf fd-find ripgrep fzf tmux htop jq tree bat less bash-completion \
+            file unzip xdg-utils \
             build-essential bc bison flex \
             libssl-dev libelf-dev libncurses-dev dwarves \
             rsync cpio kmod fakeroot dpkg-dev quilt debhelper \
@@ -120,19 +128,71 @@ jobs:
             exit 1
           }
 
-          install -d -m 0700 "$HOME/.ssh" "$HOME/.local/bin" \
-            "$HOME/.config/nvim" "$HOME/.config/d630-runner"
+          DOTFILES="$RUNNER_TEMP/deb12dots"
+          for config in \
+            .bashrc .aaliases .inputrc \
+            .config/nvim/init.lua \
+            .config/lf/lfrc .config/lf/icons .config/lf/colors \
+            .config/bat/config \
+            bash-command-timer/bash_command_timer.sh; do
+            [[ -s "$DOTFILES/$config" ]] || {
+              echo "::error::Required user configuration is missing: $config"
+              exit 1
+            }
+          done
+
+          mkdir -p "$HOME/.ssh" "$HOME/.local/bin" "$HOME/.config/d630-runner" \
+            "$HOME/.local/lib/bash-command-timer" "$HOME/.trash"
           printf '%s\n' "$SSH_PUBLIC_KEY" > "$RUNNER_TEMP/authorized_keys"
           ssh-keygen -lf "$RUNNER_TEMP/authorized_keys" >/dev/null
-          install -m 0600 "$RUNNER_TEMP/authorized_keys" "$HOME/.ssh/authorized_keys"
+          chmod 0600 "$RUNNER_TEMP/authorized_keys"
+          cp "$RUNNER_TEMP/authorized_keys" "$HOME/.ssh/authorized_keys"
+          chmod 0600 "$HOME/.ssh/authorized_keys"
+
+          # Deploy the Debian 12 shell, lf, bat, and complete vendored Neovim config.
+          cp "$DOTFILES/.bashrc" "$HOME/.bashrc"
+          cp "$DOTFILES/.aaliases" "$HOME/.aaliases"
+          cp "$DOTFILES/.inputrc" "$HOME/.inputrc"
+          cp -a "$DOTFILES/.config/nvim" "$HOME/.config/"
+          cp -a "$DOTFILES/.config/lf" "$HOME/.config/"
+          cp -a "$DOTFILES/.config/bat" "$HOME/.config/"
+          cp "$DOTFILES/bash-command-timer/bash_command_timer.sh" \
+            "$HOME/.local/lib/bash-command-timer/bash_command_timer.sh"
+
+          # Correct two typos in the runner copy without changing deb12dots.
+          sed -i \
+            -e '/^set prewiew!$/d' \
+            -e 's|\$HOME\.config/lf/lfrc|$HOME/.config/lf/lfrc|' \
+            "$HOME/.config/lf/lfrc"
 
           ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
           ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
-          install -m 0644 config/runner/nvim/init.lua "$HOME/.config/nvim/init.lua"
+
           printf 'export D630_WORKSPACE=%q\n' "$GITHUB_WORKSPACE" \
             > "$HOME/.config/d630-runner/env"
+          cat >> "$HOME/.config/d630-runner/env" <<'EOF'
+          export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+          export PATH="$HOME/.local/bin:$PATH"
+          export OPENER="${OPENER:-xdg-open}"
+          export ARCH=x86_64
+          export KCFLAGS="${KCFLAGS:--march=core2 -mtune=core2}"
+          export BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
+          export MAKEFLAGS="${MAKEFLAGS:--j$BUILD_JOBS}"
+          [[ -r "$HOME/.config/lf/icons" ]] && source "$HOME/.config/lf/icons"
+          builtin cd -- "$D630_WORKSPACE"
+          EOF
           chmod 0600 "$HOME/.config/d630-runner/env"
-          cat config/runner/bashrc >> "$HOME/.bashrc"
+
+          cat >> "$HOME/.bashrc" <<'EOF'
+
+          # D630 hosted-runner environment.
+          [[ -r "$HOME/.config/d630-runner/env" ]] && source "$HOME/.config/d630-runner/env"
+          EOF
+
+          bash -n "$HOME/.bashrc"
+          bash -n "$HOME/.aaliases"
+          bash -n "$HOME/.local/lib/bash-command-timer/bash_command_timer.sh"
+          nvim --headless -u "$HOME/.config/nvim/init.lua" +qa
 
       - name: Authenticate GitHub CLI for this repository
         env:
