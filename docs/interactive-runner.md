@@ -1,96 +1,63 @@
 # Interactive build runner
 
-The `D630 Interactive Build Runner` workflow creates a temporary Ubuntu 24.04 VM and exposes its SSH service only on the Tailscale interface. It does not modify the normal kernel build/release workflow.
+The `D630 Interactive Build Runner` workflow creates a temporary Ubuntu 24.04 VM. SSH listens only on the runner's Tailscale IPv4 address. The workflow is manual-only and has a six-hour job limit.
 
-## One-time setup
+## Repository secrets
 
-### 1. SSH key
+Configure these GitHub Actions repository secrets in `AmrUser-48/d630-debian-kernel`:
 
-Reuse the existing D630 client identity. The client function uses `~/.ssh/id_ed25519_macos_runner`; do not generate another keypair. Add the contents of `~/.ssh/id_ed25519_macos_runner.pub` as repository secret `SSH_PUBLIC_KEY` if that secret is not already configured. Keep the private key on the D630; never upload it. The D630 must also be connected to the same Tailscale network.
+- `SSH_PUBLIC_KEY`: the public half of `~/.ssh/id_ed25519_macos_runner`. The private key stays on the client.
+- `TAILSCALE_AUTHKEY`: a Tailscale auth key accepted by the tailnet. The workflow passes it to `tailscale/github-action@v4`.
 
-### 2. Tailscale workload identity
+The client machine must be logged into the same tailnet. The tailnet ACL must allow the client to reach `tag:d630-runner` over TCP 22 and the UDP ports used by Mosh (default range 60000–61000). Do not expose SSH on the public interface.
 
-Configure a Tailscale GitHub workload identity federation for this repository. It must have the `auth_keys` scope. Add these GitHub repository secrets:
-
-- `TS_OAUTH_CLIENT_ID`
-- `TS_AUDIENCE`
-
-Create the tag `tag:d630-runner` in the tailnet policy and allow the federated identity to create ephemeral nodes with that tag. The action uses OIDC federation rather than a reusable long-lived auth key. Tailscale removes the ephemeral node after the job ends.
-
-A restrictive policy fragment is:
-
-```json
-{
-  "tagOwners": {
-    "tag:d630-runner": ["autogroup:admin"]
-  },
-  "grants": [
-    {
-      "src": ["YOUR-TAILSCALE-USER-IDENTITY"],
-      "dst": ["tag:d630-runner"],
-      "ip": ["tcp:22", "udp:60000-61000"]
-    }
-  ]
-}
-```
-
-Replace `YOUR-TAILSCALE-USER-IDENTITY` with the exact user identity used by the D630. Do not grant access to every tailnet member unless that is intentional. Merge this fragment into the existing policy; do not replace the rest of the policy.
-
-### 3. Start a session
-
-Open **Actions → D630 Interactive Build Runner → Run workflow**. Select `main`. The job is manually triggered and has a six-hour maximum lifetime.
-
-The log prints the Tailscale hostname, IPv4 address, and SSH host-key fingerprint. The client starter resolves the hostname through `tailscale status` and connects using the existing private key:
+Set the secrets with GitHub CLI:
 
 ```bash
-ssh -i ~/.ssh/id_ed25519_macos_runner \
-  -o ServerAliveInterval=20 \
-  -o ServerAliveCountMax=3 \
-  runner@RUNNER_HOST
+gh secret set SSH_PUBLIC_KEY -R AmrUser-48/d630-debian-kernel < ~/.ssh/id_ed25519_macos_runner.pub
+gh secret set TAILSCALE_AUTHKEY -R AmrUser-48/d630-debian-kernel
 ```
 
-The host key is generated for that ephemeral VM, so verify the fingerprint printed in the workflow log on first connection. Each run uses a unique Tailscale hostname when MagicDNS is available.
-
-## Low-latency terminal
-
-Install Mosh on the D630:
+The second command prompts for the auth-key value. Check names, not values, with:
 
 ```bash
-sudo apt install mosh
+gh secret list -R AmrUser-48/d630-debian-kernel
 ```
 
-Then connect:
+## Start and connect
+
+Run the workflow from the D630 client with the `deb-runner` shell function, or dispatch **D630 Interactive Build Runner** manually from the repository's Actions page. The function waits for the new runner to join Tailscale, verifies SSH access with the configured private key, writes the Mosh reconnect command to `~/.deb-runner`, and starts Mosh.
+
+Reconnect to an existing runner with:
 
 ```bash
-mosh --ssh="ssh -i ~/.ssh/id_ed25519_macos_runner" runner@RUNNER_HOST
+~/.deb-runner
 ```
 
-Mosh authenticates through SSH and then carries the interactive terminal over UDP. Its local echo makes typing responsive when round-trip latency is noticeable. Tailscale policy must allow UDP ports `60000-61000` from the D630 to `tag:d630-runner`. Use ordinary SSH for TCP forwarding, SFTP, and other non-interactive SSH features; Mosh does not provide those features.
+The client function must not use `exec "$HOME/.deb-runner"`; invoke the script as a child so disconnecting from Mosh returns to the local shell.
 
-For a terminal that survives temporary SSH/Mosh disconnects, start:
+The workflow log prints the runner's Tailscale hostname, IPv4 address, and SSH host-key fingerprint. The runner is ephemeral; cancel the workflow to terminate it, or let the six-hour limit expire.
 
-```bash
-tmux new -As d630
-```
+## Installed user configuration
 
-Cancel the workflow run to terminate the VM. The runner and its local files are ephemeral.
+The workflow fetches the Debian-specific configuration repository `AmrUser-48/deb12dots` at runtime. It installs these user files into the runner account:
 
-## Included environment
+- Bash: `.bashrc`, `.aaliases`, and `.inputrc`.
+- Neovim: the complete `.config/nvim` directory, including its vendored plugins and themes.
+- lf: `.config/lf/lfrc`, `icons`, and `colors`.
+- bat: `.config/bat/config`.
+- Command timer: `bash-command-timer/bash_command_timer.sh`, installed at the path expected by the Bash configuration.
 
-- `git` and `gh`; GitHub CLI is authenticated with a job-scoped `GITHUB_TOKEN` limited to this repository.
-- `lf`, `fd` (`fdfind` package), Neovim, ripgrep, fzf, tmux, htop, jq, tree, and bat.
-- Mosh and OpenSSH server. Password authentication is disabled; SSH listens only on the Tailscale IPv4 address.
-- Native Ubuntu kernel build prerequisites from `BUILD-UBUNTU.md`. The GitHub image already supplies GCC/Make, Git/GH, Bison, Flex, OpenSSL headers, rsync, dpkg tools, zstd, xz, and LZ4; the workflow adds only the missing build libraries/tools, SSH/Mosh, and the CLI environment.
-- Intel microcode and Intel wireless firmware packages for the D630 build inputs.
+The workflow also creates `~/.config/d630-runner/env`. It sets the workspace to the checked-out `d630-debian-kernel` repository, puts `~/.local/bin` first on `PATH`, sets `OPENER=xdg-open`, and configures Core 2 build settings: `ARCH=x86_64`, `KCFLAGS=-march=core2 -mtune=core2`, and `BUILD_JOBS`/`MAKEFLAGS` from the hosted runner's CPU count. The user's Bash configuration sources this environment.
 
-Vim packages are purged. The `vi` and `vim` shell aliases invoke Neovim; there is no Vim executable.
+The runner setup installs `fd` as a symlink to Debian's `fdfind`, and `bat` as a symlink to `batcat`. It validates the shell scripts and starts Neovim headlessly before proceeding to Tailscale/SSH setup. Two invalid lf config lines are corrected only in the runner copy; the source `deb12dots` repository is not modified.
 
-The Bash profile sets `ARCH=x86_64`, defaults `KCFLAGS` to `-march=core2 -mtune=core2`, and sets `BUILD_JOBS` and GNU Make's default parallelism (`MAKEFLAGS`) to the hosted VM's `nproc`. This separates target CPU tuning from build parallelism: generated kernel code targets the T7250/Core 2, while compilation uses the hosted runner's available CPUs. The public-repository Ubuntu 24.04 standard runner currently provides 4 vCPUs and 16 GB RAM.
+The runner also installs Neovim, lf, ripgrep, fzf, tmux, htop, jq, tree, Mosh, OpenSSH, and the D630 kernel build prerequisites. Vim packages are removed; Neovim provides the editor.
+
+## D630 firmware checks
+
+Before exposing the session, the workflow checks for the Intel 3945ABG firmware and the T7250 microcode file `intel-ucode/06-0f-0d`, then validates CPUID signature `0x000006fd`. The wireless firmware is decompressed directly to the kernel-requested path when the package supplies a `.zst` file. The installed microcode is checked in place.
 
 ## Build workflow distinction
 
-The runner requires the exact T7250 microcode blob and validates CPUID signature `0x000006fd` before exposing the session. It also requires the Intel 3945ABG firmware file. The interactive checkout is switched to the dispatched branch, and GitHub CLI/Git are authenticated with the run-scoped repository token.
-
-The existing `d630-kernel-build.yml` remains unchanged. It builds in a Debian Bookworm container and performs the repository's full audit and release process.
-
-The interactive runner is a native Ubuntu environment. Use `BUILD-UBUNTU.md` for the direct `make bindeb-pkg` route. The current CI script installs its dependencies inside its Debian container, so installing Ubuntu host packages does not pre-populate that container's package database.
+This is a native Ubuntu interactive environment. Use `BUILD-UBUNTU.md` for the direct Ubuntu `make bindeb-pkg` route. The existing `d630-kernel-build.yml` remains separate: it builds in Debian Bookworm and performs the repository's audit and release process.
