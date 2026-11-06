@@ -12,7 +12,7 @@ On the D630, create a dedicated key pair:
 ssh-keygen -t ed25519 -a 64 -f ~/.ssh/d630-runner
 ```
 
-Add the contents of `~/.ssh/d630-runner.pub` as repository secret `SSH_PUBLIC_KEY`. Keep the private key on the D630; never upload it.
+Add the contents of `~/.ssh/d630-runner.pub` as repository secret `SSH_PUBLIC_KEY`. Keep the private key on the D630; never upload it. The D630 must also be connected to the same Tailscale network.
 
 ### 2. Tailscale workload identity
 
@@ -46,16 +46,16 @@ Replace `YOUR-TAILSCALE-USER-IDENTITY` with the exact user identity used by the 
 
 Open **Actions → D630 Interactive Build Runner → Run workflow**. Select the branch containing this workflow. The job is manually triggered and has a six-hour maximum lifetime.
 
-The log prints the Tailscale IPv4 address and the SSH host-key fingerprint. Connect using the private key:
+The log prints the Tailscale DNS name (preferred), IPv4 fallback, and SSH host-key fingerprint. Connect using the private key and the printed host name:
 
 ```bash
 ssh -i ~/.ssh/d630-runner \
   -o ServerAliveInterval=20 \
   -o ServerAliveCountMax=3 \
-  runner@TAILSCALE_IPV4
+  runner@RUNNER_HOST
 ```
 
-The host key is generated for that ephemeral VM, so verify the fingerprint printed in the workflow log on first connection.
+The host key is generated for that ephemeral VM, so verify the fingerprint printed in the workflow log on first connection. Each run uses a unique Tailscale hostname when MagicDNS is available.
 
 ## Low-latency terminal
 
@@ -68,7 +68,7 @@ sudo apt install mosh
 Then connect:
 
 ```bash
-mosh --ssh="ssh -i ~/.ssh/d630-runner" runner@TAILSCALE_IPV4
+mosh --ssh="ssh -i ~/.ssh/d630-runner" runner@RUNNER_HOST
 ```
 
 Mosh authenticates through SSH and then carries the interactive terminal over UDP. Its local echo makes typing responsive when round-trip latency is noticeable. Tailscale policy must allow UDP ports `60000-61000` from the D630 to `tag:d630-runner`. Use ordinary SSH for TCP forwarding, SFTP, and other non-interactive SSH features; Mosh does not provide those features.
@@ -94,6 +94,8 @@ Vim packages are purged. The `vi` and `vim` shell aliases invoke Neovim; there i
 The Bash profile sets `ARCH=x86_64`, defaults `KCFLAGS` to `-march=core2 -mtune=core2`, and sets both `BUILD_JOBS` and GNU Make's default parallelism to the hosted VM's `nproc`. This separates target CPU tuning from build parallelism: generated kernel code targets the T7250/Core 2, while compilation uses the hosted runner's available CPUs. The public-repository Ubuntu 24.04 standard runner currently provides 4 vCPUs and 16 GB RAM.
 
 ## Build workflow distinction
+
+The runner checks the exact T7250 microcode blob and CPUID signature before exposing the session. It also checks the Intel 3945ABG firmware file. The interactive checkout is switched to the dispatched branch, and GitHub CLI/Git are authenticated with the run-scoped repository token.
 
 The existing `d630-kernel-build.yml` remains unchanged. It builds in a Debian Bookworm container and performs the repository's full audit and release process.
 
