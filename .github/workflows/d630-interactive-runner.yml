@@ -136,7 +136,7 @@ jobs:
           set -Eeuo pipefail
 
           sudo tailscale set --hostname="d630-runner-${GITHUB_RUN_ID}"
-          TAILSCALE_IP="$(tailscale ip -4)"
+          TAILSCALE_IP="$(sudo tailscale ip -4)"
           [[ "$TAILSCALE_IP" =~ ^100\. ]] || {
             echo "::error::Tailscale did not return a 100.x IPv4 address."
             exit 1
@@ -173,7 +173,8 @@ jobs:
           echo "D630 INTERACTIVE RUNNER READY"
           echo "Workspace: $GITHUB_WORKSPACE"
           echo "Tailscale hostname: d630-runner-$GITHUB_RUN_ID"
-          TAILSCALE_DNS="$(tailscale status --json | jq -r '.Self.DNSName // empty' | sed 's/\\.$//')"
+          TAILSCALE_DNS="$(sudo tailscale status --json | jq -r '.Self.DNSName // empty')"
+          TAILSCALE_DNS="${TAILSCALE_DNS%.}"
           SSH_HOST="${TAILSCALE_DNS:-$TAILSCALE_IP}"
           echo "Tailscale IPv4: $TAILSCALE_IP"
           echo "Tailscale DNS: ${TAILSCALE_DNS:-unavailable; use IPv4}"
