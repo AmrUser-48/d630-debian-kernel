@@ -115,6 +115,7 @@ jobs:
           git config --global init.defaultBranch main
           git config --global fetch.prune true
           git config --global pull.ff only
+          git config --global push.autoSetupRemote true
           git config --global core.pager 'less -FRX'
           git config --global user.name "$GITHUB_ACTOR"
           git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
