@@ -83,12 +83,12 @@ jobs:
           test -s "$WIFI_TARGET"
 
           MICROCODE=/lib/firmware/intel-ucode/06-0f-0d
-          if [[ -s "$MICROCODE" ]]; then
-            iucode_tool -l "$MICROCODE" | tee "$RUNNER_TEMP/d630-microcode.txt"
-            grep -qiE '0x0*6fd' "$RUNNER_TEMP/d630-microcode.txt"
-          else
-            echo "::warning::T7250 microcode 06-0f-0d is not at $MICROCODE; see BUILD-UBUNTU.md before a native firmware-embedding build."
+          if [[ ! -s "$MICROCODE" ]]; then
+            echo "::error::T7250 microcode 06-0f-0d is missing; refusing to start an incomplete D630 build environment."
+            exit 1
           fi
+          iucode_tool -l "$MICROCODE" | tee "$RUNNER_TEMP/d630-microcode.txt"
+          grep -qiE '0x0*6fd' "$RUNNER_TEMP/d630-microcode.txt"
 
           install -d -m 0700 "$HOME/.ssh" "$HOME/.local/bin" \
             "$HOME/.config/nvim" "$HOME/.config/d630-runner"
@@ -118,6 +118,7 @@ jobs:
           git config --global core.pager 'less -FRX'
           git config --global user.name "$GITHUB_ACTOR"
           git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+          git switch -C "$GITHUB_REF_NAME" "$GITHUB_SHA"
           gh auth status
           git --version
           gh --version
@@ -171,9 +172,12 @@ jobs:
           echo "D630 INTERACTIVE RUNNER READY"
           echo "Workspace: $GITHUB_WORKSPACE"
           echo "Tailscale hostname: d630-runner-$GITHUB_RUN_ID"
+          TAILSCALE_DNS="$(tailscale status --json | jq -r '.Self.DNSName // empty' | sed 's/\\.$//')"
+          SSH_HOST="${TAILSCALE_DNS:-$TAILSCALE_IP}"
           echo "Tailscale IPv4: $TAILSCALE_IP"
-          echo "SSH:  ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3 runner@$TAILSCALE_IP"
-          echo "Mosh: mosh --ssh='ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3' runner@$TAILSCALE_IP"
+          echo "Tailscale DNS: ${TAILSCALE_DNS:-unavailable; use IPv4}"
+          echo "SSH:  ssh -i ~/.ssh/d630-runner -o ServerAliveInterval=20 -o ServerAliveCountMax=3 runner@$SSH_HOST"
+          echo "Mosh: mosh --ssh='ssh -i ~/.ssh/d630-runner' runner@$SSH_HOST"
           echo "SSH host key fingerprint:"
           sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
           echo
