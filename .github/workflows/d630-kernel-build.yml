@@ -58,10 +58,14 @@ jobs:
           if [[ -z "$CONFIG_PATH" || ! -f "$CONFIG_PATH" || "$CONFIG_PATH" != "$GITHUB_WORKSPACE"/config/* ]]; then
             echo "::error::CONFIG_FILE must identify a file inside config/. Received: $CONFIG_FILE"
             echo "Available configuration files:"
-            find config -type f -printf '  %P\\n' | sort
+            find config -type f -printf '  %P\n' | sort
             exit 1
           fi
-          printf 'Selected kernel configuration: %s\\n' "${CONFIG_PATH#"$GITHUB_WORKSPACE"/}"
+          if ! grep -Eq '^(CONFIG_[A-Z0-9_]+=|# CONFIG_[A-Z0-9_]+ is not set$)' "$CONFIG_PATH"; then
+            echo "::error::Selected file is not a Linux Kconfig file: $CONFIG_FILE"
+            exit 1
+          fi
+          printf 'Selected kernel configuration: %s\n' "${CONFIG_PATH#"$GITHUB_WORKSPACE"/}"
           printf 'Selected config SHA256: '
           sha256sum "$CONFIG_PATH"
 
