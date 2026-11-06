@@ -176,6 +176,7 @@ jobs:
           MaxSessions 12
           EOF
 
+          sudo install -d -m 0755 /run/sshd
           sudo ssh-keygen -A
           sudo /usr/sbin/sshd -t
           sudo systemctl enable --now ssh
