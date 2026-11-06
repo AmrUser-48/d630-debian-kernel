@@ -13,6 +13,10 @@ if [[ -z "$CONFIG_PATH" || ! -f "$CONFIG_PATH" || "$CONFIG_PATH" != "$ROOT"/conf
   find "$ROOT/config" -type f -printf '  %P\n' | sort >&2
   exit 2
 fi
+if ! grep -Eq '^(CONFIG_[A-Z0-9_]+=|# CONFIG_[A-Z0-9_]+ is not set$)' "$CONFIG_PATH"; then
+  echo "Selected file is not a Linux Kconfig file: $CONFIG_FILE" >&2
+  exit 2
+fi
 case "$BUILD_VARIANT" in
   amd64)
     FEATURESET=none
