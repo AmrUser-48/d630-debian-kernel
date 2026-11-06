@@ -59,8 +59,12 @@ jobs:
             curl ca-certificates xz-utils zstd lz4 \
             intel-microcode linux-firmware-intel-wireless iucode-tool
 
-          if command -v vim >/dev/null 2>&1; then
-            echo "::error::Vim is still installed after package removal."
+          mapfile -t REMAINING_VIM_PACKAGES < <(
+            dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\\n' 'vim*' 2>/dev/null |
+              awk '$1 == "ii" && $2 ~ /^vim([.-]|$)/ { print $2 }'
+          )
+          if (("${#REMAINING_VIM_PACKAGES[@]}")); then
+            printf '::error::Vim packages remain installed: %s\\n' "${REMAINING_VIM_PACKAGES[*]}"
             exit 1
           fi
           command -v nvim
