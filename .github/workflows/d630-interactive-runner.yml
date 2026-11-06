@@ -110,7 +110,7 @@ jobs:
           MICROCODE_SOURCE="$(find -L /usr/lib/firmware /lib/firmware -type f \
             -path '*/intel-ucode/06-0f-0d' -print -quit 2>/dev/null || true)"
           MICROCODE=/lib/firmware/intel-ucode/06-0f-0d
-          if [[ -n "$MICROCODE_SOURCE" ]]; then
+          if [[ -n "$MICROCODE_SOURCE" && ! -s "$MICROCODE" ]]; then
             sudo install -D -m 0644 "$MICROCODE_SOURCE" "$MICROCODE"
           fi
           test -s "$MICROCODE" || {
