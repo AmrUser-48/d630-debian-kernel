@@ -2,14 +2,13 @@ name: D630 Debian Core 2 Kernel — Build, Audit & Release
 run-name: "D630 Core 2 kernel / ${{ github.ref_name }} / #${{ github.run_number }}"
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/**"
-      - "config/config.thin"
-      - "scripts/**"
   workflow_dispatch:
+    inputs:
+      config_file:
+        description: "Config path relative to config/ (for example: d630-core2.config or config.strip.normal)"
+        required: true
+        type: string
+        default: "d630-core2.config"
 
 permissions:
   contents: write
@@ -27,6 +26,7 @@ jobs:
       BUILD_VARIANT: "amd64"
       SOURCE_VERSION: "6.1.180-1"
       BUILD_JOBS: "2"
+      CONFIG_FILE: ${{ inputs.config_file }}
     defaults:
       run:
         shell: bash
@@ -47,8 +47,23 @@ jobs:
             echo "Branch: $GITHUB_REF_NAME"
             echo "Build target: standard amd64"
             echo "Source package: linux=$SOURCE_VERSION"
+            echo "Kernel config: config/$CONFIG_FILE"
             echo "Started at UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           } > "build-$BUILD_VARIANT.log"
+
+      - name: Validate selected kernel configuration
+        run: |
+          set -Eeuo pipefail
+          CONFIG_PATH="$(realpath -e -- "config/$CONFIG_FILE" 2>/dev/null || true)"
+          if [[ -z "$CONFIG_PATH" || ! -f "$CONFIG_PATH" || "$CONFIG_PATH" != "$GITHUB_WORKSPACE"/config/* ]]; then
+            echo "::error::CONFIG_FILE must identify a file inside config/. Received: $CONFIG_FILE"
+            echo "Available configuration files:"
+            find config -type f -printf '  %P\\n' | sort
+            exit 1
+          fi
+          printf 'Selected kernel configuration: %s\\n' "${CONFIG_PATH#"$GITHUB_WORKSPACE"/}"
+          printf 'Selected config SHA256: '
+          sha256sum "$CONFIG_PATH"
 
       - name: Lint workflow and build scripts
         run: |
@@ -79,6 +94,7 @@ jobs:
             --env BUILD_VARIANT \
             --env SOURCE_VERSION \
             --env BUILD_JOBS \
+            --env CONFIG_FILE \
             debian:bookworm \
             bash -e -o pipefail -c 'bash scripts/build-d630-kernel.sh' \
             2>&1 | tee -a "build-$BUILD_VARIANT.log"
