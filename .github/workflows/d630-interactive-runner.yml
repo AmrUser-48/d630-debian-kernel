@@ -80,11 +80,11 @@ jobs:
           command -v gh
           command -v mosh-server
 
-          sudo install -d -m 0755 /lib/firmware /lib/firmware/intel-ucode
+          sudo mkdir -p /lib/firmware /lib/firmware/intel-ucode
 
           # Ubuntu 24.04 stores this legacy blob compressed below
           # /usr/lib/firmware/intel/iwlwifi/, not at the kernel's requested path.
-          WIFI_SOURCE="$(find -L /usr/lib/firmware /lib/firmware -type f \
+          WIFI_SOURCE="$(find -L /usr/lib/firmware -type f \
             -name 'iwlwifi-3945-2.ucode*' -print -quit 2>/dev/null || true)"
           WIFI_TARGET=/lib/firmware/iwlwifi-3945-2.ucode
           if [[ -z "$WIFI_SOURCE" ]]; then
@@ -95,24 +95,20 @@ jobs:
 
           if [[ "$WIFI_SOURCE" == *.zst ]]; then
             zstd -q -t "$WIFI_SOURCE"
-            zstd -q -d -f "$WIFI_SOURCE" -o "$RUNNER_TEMP/iwlwifi-3945-2.ucode"
-          else
-            install -m 0644 "$WIFI_SOURCE" "$RUNNER_TEMP/iwlwifi-3945-2.ucode"
+            sudo zstd -q -d -f "$WIFI_SOURCE" -o "$WIFI_TARGET"
+          elif [[ "$(readlink -f "$WIFI_SOURCE")" != "$(readlink -m "$WIFI_TARGET")" ]]; then
+            sudo cp -- "$WIFI_SOURCE" "$WIFI_TARGET"
           fi
-          test -s "$RUNNER_TEMP/iwlwifi-3945-2.ucode"
-          sudo install -D -m 0644 "$RUNNER_TEMP/iwlwifi-3945-2.ucode" "$WIFI_TARGET"
+          sudo chmod 0644 "$WIFI_TARGET"
           test -s "$WIFI_TARGET"
-          echo "Installed 3945 firmware: $WIFI_SOURCE -> $WIFI_TARGET"
+          echo "Firmware source: $WIFI_SOURCE"
+          echo "Firmware target: $WIFI_TARGET"
           stat -c 'Firmware size: %s bytes' "$WIFI_TARGET"
           sha256sum "$WIFI_TARGET"
 
-          # Install the exact T7250 microcode file at CONFIG_EXTRA_FIRMWARE's path.
-          MICROCODE_SOURCE="$(find -L /usr/lib/firmware /lib/firmware -type f \
-            -path '*/intel-ucode/06-0f-0d' -print -quit 2>/dev/null || true)"
+          # intel-microcode already installs this exact file under /usr/lib;
+          # /lib is the same firmware tree on Ubuntu. Validate it in place.
           MICROCODE=/lib/firmware/intel-ucode/06-0f-0d
-          if [[ -n "$MICROCODE_SOURCE" && ! -s "$MICROCODE" ]]; then
-            sudo install -D -m 0644 "$MICROCODE_SOURCE" "$MICROCODE"
-          fi
           test -s "$MICROCODE" || {
             echo "::error::T7250 microcode 06-0f-0d is missing."
             dpkg -L intel-microcode 2>/dev/null | grep -F '/06-0f-0d' || true
