@@ -86,12 +86,12 @@ Cancel the workflow run to terminate the VM. The runner and its local files are 
 - `git` and `gh`; GitHub CLI is authenticated with a job-scoped `GITHUB_TOKEN` limited to this repository.
 - `lf`, `fd` (`fdfind` package), Neovim, ripgrep, fzf, tmux, htop, jq, tree, and bat.
 - Mosh and OpenSSH server. Password authentication is disabled; SSH listens only on the Tailscale IPv4 address.
-- Native Ubuntu kernel build prerequisites from `BUILD-UBUNTU.md`, including GCC/build-essential, Bison, Flex, OpenSSL/ELF/ncurses headers, pahole, rsync, cpio, dpkg tools, Python helpers, zstd, xz, and LZ4.
+- Native Ubuntu kernel build prerequisites from `BUILD-UBUNTU.md`. The GitHub image already supplies GCC/Make, Git/GH, Bison, Flex, OpenSSL headers, rsync, dpkg tools, zstd, xz, and LZ4; the workflow adds only the missing build libraries/tools, SSH/Mosh, and the CLI environment.
 - Intel microcode and Intel wireless firmware packages for the D630 build inputs.
 
 Vim packages are purged. The `vi` and `vim` shell aliases invoke Neovim; there is no Vim executable.
 
-The Bash profile sets `ARCH=x86_64`, defaults `KCFLAGS` to `-march=core2 -mtune=core2`, and sets `BUILD_JOBS` to the hosted VM's `nproc`. This separates target CPU tuning from build parallelism: generated kernel code targets the T7250/Core 2, while compilation uses the hosted runner's available CPUs. The public-repository Ubuntu 24.04 standard runner currently provides 4 vCPUs and 16 GB RAM.
+The Bash profile sets `ARCH=x86_64`, defaults `KCFLAGS` to `-march=core2 -mtune=core2`, and sets both `BUILD_JOBS` and GNU Make's default parallelism to the hosted VM's `nproc`. This separates target CPU tuning from build parallelism: generated kernel code targets the T7250/Core 2, while compilation uses the hosted runner's available CPUs. The public-repository Ubuntu 24.04 standard runner currently provides 4 vCPUs and 16 GB RAM.
 
 ## Build workflow distinction
 
