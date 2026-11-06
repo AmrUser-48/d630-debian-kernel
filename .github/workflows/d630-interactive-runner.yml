@@ -8,7 +8,6 @@ permissions:
   contents: write
   pull-requests: write
   actions: read
-  id-token: write
 
 jobs:
   interactive:
@@ -65,7 +64,7 @@ jobs:
             openssh-server mosh \
             git gh \
             neovim lf fd-find ripgrep fzf tmux htop jq tree bat less bash-completion \
-            file unzip xdg-utils \
+            file unzip zip xdg-utils libfile-mimeinfo-perl \
             build-essential bc bison flex \
             libssl-dev libelf-dev libncurses-dev dwarves \
             rsync cpio kmod fakeroot dpkg-dev quilt debhelper \
