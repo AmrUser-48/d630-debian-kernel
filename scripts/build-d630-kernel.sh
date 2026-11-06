@@ -5,6 +5,14 @@ ROOT="$(cd -- "$(dirname -- "$0")/.." && pwd)"
 BUILD_VARIANT="${BUILD_VARIANT:-amd64}"
 SOURCE_VERSION="${SOURCE_VERSION:-6.1.180-1}"
 BUILD_JOBS="${BUILD_JOBS:-2}"
+CONFIG_FILE="${CONFIG_FILE:-d630-core2.config}"
+CONFIG_PATH="$(realpath -e -- "$ROOT/config/$CONFIG_FILE" 2>/dev/null || true)"
+if [[ -z "$CONFIG_PATH" || ! -f "$CONFIG_PATH" || "$CONFIG_PATH" != "$ROOT"/config/* ]]; then
+  echo "CONFIG_FILE must identify a file inside $ROOT/config/: $CONFIG_FILE" >&2
+  echo "Available configuration files:" >&2
+  find "$ROOT/config" -type f -printf '  %P\n' | sort >&2
+  exit 2
+fi
 case "$BUILD_VARIANT" in
   amd64)
     FEATURESET=none
@@ -43,9 +51,10 @@ rm -rf "$WORK" "$AUDIT" "$DIST"
 mkdir -p "$WORK" "$AUDIT" "$DIST" "$INPUTS/source"
 
 echo "=== Build contract ==="
-printf 'Variant: %s\nFeatureset: %s\nSource: linux=%s\nExpected kernel release: %s\n' \
-  "$BUILD_VARIANT" "$FEATURESET" "$SOURCE_VERSION" "$EXPECTED_RELEASE"
+printf 'Variant: %s\nFeatureset: %s\nSource: linux=%s\nExpected kernel release: %s\nConfig: %s\n' \
+  "$BUILD_VARIANT" "$FEATURESET" "$SOURCE_VERSION" "$EXPECTED_RELEASE" "$CONFIG_FILE"
 echo "Build target: $BUILD_TARGET"
+sha256sum "$CONFIG_PATH"
 
 echo "=== Configure signed Debian Bookworm repositories ==="
 rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources
@@ -142,7 +151,7 @@ chown builder:builder "$AUDIT/debian-baseline.config"
 
 echo "=== Apply the audited D630 overlay to only the requested image target ==="
 runuser -u builder -- python3 "$ROOT/scripts/apply-d630-policy.py" \
-  "$SOURCE" "$AUDIT" "$ROOT/config/d630-core2.config" "$FEATURESET"
+  "$SOURCE" "$AUDIT" "$CONFIG_PATH" "$FEATURESET"
 
 echo "=== Regenerate Debian setup with the custom release variables ==="
 runuser -u builder -- env DEB_RULES_REQUIRES_ROOT=no \
