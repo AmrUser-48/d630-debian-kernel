@@ -94,7 +94,6 @@ jobs:
 
           install -d -m 0700 "$HOME/.ssh" "$HOME/.local/bin" \
             "$HOME/.config/nvim" "$HOME/.config/d630-runner"
-          install -m 0600 "$RUNNER_TEMP/authorized_keys" /dev/null 2>/dev/null || true
           printf '%s\n' "$SSH_PUBLIC_KEY" > "$RUNNER_TEMP/authorized_keys"
           ssh-keygen -lf "$RUNNER_TEMP/authorized_keys" >/dev/null
           install -m 0600 "$RUNNER_TEMP/authorized_keys" "$HOME/.ssh/authorized_keys"
@@ -133,8 +132,6 @@ jobs:
           tags: tag:d630-runner
 
       - name: Start SSH on the Tailscale interface
-        env:
-          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
         run: |
           set -Eeuo pipefail
 
