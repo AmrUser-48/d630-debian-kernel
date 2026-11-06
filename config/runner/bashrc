@@ -25,6 +25,7 @@ shopt -s histappend checkwinsize cmdhist
 export ARCH=x86_64
 export KCFLAGS="${KCFLAGS:--march=core2 -mtune=core2}"
 export BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
+export MAKEFLAGS="${MAKEFLAGS:--j$BUILD_JOBS}"
 
 alias ll='ls -lahF --group-directories-first'
 alias la='ls -A --group-directories-first'

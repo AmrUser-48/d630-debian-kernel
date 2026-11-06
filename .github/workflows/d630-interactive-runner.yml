@@ -85,12 +85,15 @@ jobs:
           test -s "$WIFI_TARGET"
 
           MICROCODE=/lib/firmware/intel-ucode/06-0f-0d
-          if [[ -s "$MICROCODE" ]]; then
-            iucode_tool -l "$MICROCODE" | tee "$RUNNER_TEMP/d630-microcode.txt"
-            grep -qiE '0x0*6fd' "$RUNNER_TEMP/d630-microcode.txt"
-          else
-            echo "::warning::T7250 microcode 06-0f-0d is not at $MICROCODE; see BUILD-UBUNTU.md before a native firmware-embedding build."
-          fi
+          test -s "$MICROCODE" || {
+            echo "::error::T7250 microcode 06-0f-0d is missing."
+            exit 1
+          }
+          iucode_tool -l "$MICROCODE" | tee "$RUNNER_TEMP/d630-microcode.txt"
+          grep -qiE '0x0*6fd' "$RUNNER_TEMP/d630-microcode.txt" || {
+            echo "::error::Microcode does not contain the T7250 CPUID signature 0x000006fd."
+            exit 1
+          }
 
           install -d -m 0700 "$HOME/.ssh" "$HOME/.local/bin" \
             "$HOME/.config/nvim" "$HOME/.config/d630-runner"

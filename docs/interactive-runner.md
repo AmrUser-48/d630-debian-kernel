@@ -38,9 +38,9 @@ Replace `YOUR-TAILSCALE-USER-IDENTITY` with the exact user identity used by the 
 
 ### 3. Start a session
 
-Open **Actions → D630 Interactive Build Runner → Run workflow**. Select the branch containing this workflow. The job is manually triggered and has a six-hour maximum lifetime.
+Open **Actions → D630 Interactive Build Runner → Run workflow**. Select `main`. The job is manually triggered and has a six-hour maximum lifetime.
 
-The log prints the Tailscale DNS name (preferred), IPv4 fallback, and SSH host-key fingerprint. Connect using the private key and the printed host name:
+The log prints the Tailscale hostname, IPv4 address, and SSH host-key fingerprint. The client starter resolves the hostname through `tailscale status` and connects using the existing private key:
 
 ```bash
 ssh -i ~/.ssh/id_ed25519_macos_runner \
@@ -62,7 +62,7 @@ sudo apt install mosh
 Then connect:
 
 ```bash
-mosh --ssh="ssh -i ~/.ssh/d630-runner" runner@RUNNER_HOST
+mosh --ssh="ssh -i ~/.ssh/id_ed25519_macos_runner" runner@RUNNER_HOST
 ```
 
 Mosh authenticates through SSH and then carries the interactive terminal over UDP. Its local echo makes typing responsive when round-trip latency is noticeable. Tailscale policy must allow UDP ports `60000-61000` from the D630 to `tag:d630-runner`. Use ordinary SSH for TCP forwarding, SFTP, and other non-interactive SSH features; Mosh does not provide those features.
@@ -85,11 +85,11 @@ Cancel the workflow run to terminate the VM. The runner and its local files are 
 
 Vim packages are purged. The `vi` and `vim` shell aliases invoke Neovim; there is no Vim executable.
 
-The Bash profile sets `ARCH=x86_64`, defaults `KCFLAGS` to `-march=core2 -mtune=core2`, and sets both `BUILD_JOBS` and GNU Make's default parallelism to the hosted VM's `nproc`. This separates target CPU tuning from build parallelism: generated kernel code targets the T7250/Core 2, while compilation uses the hosted runner's available CPUs. The public-repository Ubuntu 24.04 standard runner currently provides 4 vCPUs and 16 GB RAM.
+The Bash profile sets `ARCH=x86_64`, defaults `KCFLAGS` to `-march=core2 -mtune=core2`, and sets `BUILD_JOBS` and GNU Make's default parallelism (`MAKEFLAGS`) to the hosted VM's `nproc`. This separates target CPU tuning from build parallelism: generated kernel code targets the T7250/Core 2, while compilation uses the hosted runner's available CPUs. The public-repository Ubuntu 24.04 standard runner currently provides 4 vCPUs and 16 GB RAM.
 
 ## Build workflow distinction
 
-The runner checks the exact T7250 microcode blob and CPUID signature before exposing the session. It also checks the Intel 3945ABG firmware file. The interactive checkout is switched to the dispatched branch, and GitHub CLI/Git are authenticated with the run-scoped repository token.
+The runner requires the exact T7250 microcode blob and validates CPUID signature `0x000006fd` before exposing the session. It also requires the Intel 3945ABG firmware file. The interactive checkout is switched to the dispatched branch, and GitHub CLI/Git are authenticated with the run-scoped repository token.
 
 The existing `d630-kernel-build.yml` remains unchanged. It builds in a Debian Bookworm container and performs the repository's full audit and release process.
 
