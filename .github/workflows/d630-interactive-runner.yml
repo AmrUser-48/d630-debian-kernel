@@ -1,0 +1,194 @@
+name: D630 Interactive Build Runner
+run-name: "D630 interactive / ${{ github.ref_name }} / #${{ github.run_number }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  id-token: write
+
+jobs:
+  interactive:
+    name: Interactive SSH / Ubuntu 24.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      LANG: C.UTF-8
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install build and interactive tools
+        env:
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "$SSH_PUBLIC_KEY" ]]; then
+            echo "::error::Repository secret SSH_PUBLIC_KEY is required."
+            exit 1
+          fi
+
+          mapfile -t VIM_PACKAGES < <(
+            dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 'vim*' 2>/dev/null |
+              awk '$1 == "ii" && $2 ~ /^vim([.-]|$)/ { print $2 }'
+          )
+          if (("${#VIM_PACKAGES[@]}")); then
+            sudo apt-get purge --yes "${VIM_PACKAGES[@]}"
+          fi
+
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            openssh-server mosh \
+            git gh \
+            neovim lf fd-find ripgrep fzf tmux htop jq tree bat less bash-completion \
+            build-essential bc bison flex \
+            libssl-dev libelf-dev libncurses-dev dwarves \
+            rsync cpio kmod fakeroot dpkg-dev quilt debhelper \
+            python3 python3-dev python3-ply python3-setuptools \
+            curl ca-certificates xz-utils zstd lz4 \
+            intel-microcode linux-firmware-intel-wireless iucode-tool
+
+          if command -v vim >/dev/null 2>&1; then
+            echo "::error::Vim is still installed after package removal."
+            exit 1
+          fi
+          command -v nvim
+          command -v lf
+          command -v fdfind
+          command -v git
+          command -v gh
+          command -v mosh-server
+
+          sudo install -d -m 0755 /lib/firmware
+          WIFI_TARGET=/lib/firmware/iwlwifi-3945-2.ucode
+          if [[ ! -s "$WIFI_TARGET" ]]; then
+            WIFI_SOURCE="$(find /lib/firmware -type f \
+              \( -name 'iwlwifi-3945-2.ucode' -o -name 'iwlwifi-3945-2.ucode.zst' \) \
+              -print -quit)"
+            if [[ "$WIFI_SOURCE" == *.zst ]]; then
+              sudo zstd -q -d -f "$WIFI_SOURCE" -o "$WIFI_TARGET"
+            elif [[ -n "$WIFI_SOURCE" ]]; then
+              sudo install -m 0644 "$WIFI_SOURCE" "$WIFI_TARGET"
+            fi
+          fi
+          test -s "$WIFI_TARGET"
+
+          MICROCODE=/lib/firmware/intel-ucode/06-0f-0d
+          if [[ -s "$MICROCODE" ]]; then
+            iucode_tool -l "$MICROCODE" | tee "$RUNNER_TEMP/d630-microcode.txt"
+            grep -qiE '0x0*6fd' "$RUNNER_TEMP/d630-microcode.txt"
+          else
+            echo "::warning::T7250 microcode 06-0f-0d is not at $MICROCODE; see BUILD-UBUNTU.md before a native firmware-embedding build."
+          fi
+
+          install -d -m 0700 "$HOME/.ssh" "$HOME/.local/bin" \
+            "$HOME/.config/nvim" "$HOME/.config/d630-runner"
+          printf '%s\n' "$SSH_PUBLIC_KEY" > "$RUNNER_TEMP/authorized_keys"
+          ssh-keygen -lf "$RUNNER_TEMP/authorized_keys" >/dev/null
+          install -m 0600 "$RUNNER_TEMP/authorized_keys" "$HOME/.ssh/authorized_keys"
+
+          ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
+          ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
+          install -m 0644 config/runner/nvim/init.lua "$HOME/.config/nvim/init.lua"
+          printf 'export D630_WORKSPACE=%q\n' "$GITHUB_WORKSPACE" \
+            > "$HOME/.config/d630-runner/env"
+          chmod 0600 "$HOME/.config/d630-runner/env"
+          cat config/runner/bashrc >> "$HOME/.bashrc"
+
+      - name: Authenticate GitHub CLI for this repository
+        env:
+          GH_TOKEN_INPUT: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          printf '%s\n' "$GH_TOKEN_INPUT" |
+            gh auth login --hostname github.com --with-token
+          gh auth setup-git
+          git config --global init.defaultBranch main
+          git config --global fetch.prune true
+          git config --global pull.ff only
+          git config --global core.pager 'less -FRX'
+          git config --global user.name "$GITHUB_ACTOR"
+          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+          gh auth status
+          git --version
+          gh --version
+
+      - name: Join Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:d630-runner
+
+      - name: Start SSH on the Tailscale interface
+        run: |
+          set -Eeuo pipefail
+
+          sudo tailscale set --hostname="d630-runner-${GITHUB_RUN_ID}"
+          TAILSCALE_IP="$(tailscale ip -4)"
+          [[ "$TAILSCALE_IP" =~ ^100\. ]] || {
+            echo "::error::Tailscale did not return a 100.x IPv4 address."
+            exit 1
+          }
+
+          sudo install -d -m 0755 /etc/ssh/sshd_config.d
+          sudo tee /etc/ssh/sshd_config.d/60-d630-interactive.conf >/dev/null <<EOF
+          Port 22
+          ListenAddress $TAILSCALE_IP
+          PubkeyAuthentication yes
+          AuthenticationMethods publickey
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitRootLogin no
+          AllowUsers runner
+          PermitTTY yes
+          AllowTcpForwarding yes
+          X11Forwarding no
+          PermitTunnel no
+          Compression no
+          TCPKeepAlive yes
+          ClientAliveInterval 30
+          ClientAliveCountMax 6
+          MaxSessions 12
+          EOF
+
+          sudo ssh-keygen -A
+          sudo /usr/sbin/sshd -t
+          sudo systemctl enable --now ssh
+          sudo systemctl restart ssh
+          sudo ss -ltnp | grep -F "$TAILSCALE_IP:22"
+
+          echo
+          echo "D630 INTERACTIVE RUNNER READY"
+          echo "Workspace: $GITHUB_WORKSPACE"
+          echo "Tailscale hostname: d630-runner-$GITHUB_RUN_ID"
+          echo "Tailscale IPv4: $TAILSCALE_IP"
+          echo "SSH:  ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3 runner@$TAILSCALE_IP"
+          echo "Mosh: mosh --ssh='ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3' runner@$TAILSCALE_IP"
+          echo "SSH host key fingerprint:"
+          sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+          echo
+          echo "Build CPUs: $(nproc)"
+          echo "Memory:"
+          free -h
+          echo "Disk:"
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Keep interactive runner available
+        run: |
+          set -Eeuo pipefail
+          echo "Runner remains available until this workflow is cancelled or reaches its 6-hour timeout."
+          while true; do
+            sleep 300
+          done
