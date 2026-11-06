@@ -31,11 +31,17 @@ jobs:
       - name: Install build and interactive tools
         env:
           SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
           set -Eeuo pipefail
 
           if [[ -z "$SSH_PUBLIC_KEY" ]]; then
             echo "::error::Repository secret SSH_PUBLIC_KEY is required."
+            exit 1
+          fi
+
+          if [[ -z "$TAILSCALE_AUTHKEY" ]]; then
+            echo "::error::Repository secret TAILSCALE_AUTHKEY is required for Tailscale authentication."
             exit 1
           fi
 
@@ -134,9 +140,9 @@ jobs:
       - name: Join Tailscale
         uses: tailscale/github-action@v4
         with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          audience: ${{ secrets.TS_AUDIENCE }}
-          tags: tag:d630-runner
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          hostname: d630-runner-${{ github.run_id }}
+          use-cache: "true"
 
       - name: Start SSH on the Tailscale interface
         run: |
