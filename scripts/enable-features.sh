@@ -272,6 +272,22 @@ scripts/config --enable NFT_COMPAT
 scripts/config --enable IP_NF_IPTABLES
 scripts/config --enable IP6_NF_IPTABLES
 scripts/config --enable IP_SET
+
+scripts/config --enable NF_TABLES_IPV4
+scripts/config --enable NF_TABLES_IPV6
+scripts/config --enable NF_TABLES_ARP
+scripts/config --enable NFT_CT
+scripts/config --enable NFT_LIMIT
+scripts/config --enable NFT_COUNTER
+scripts/config --enable NFT_LOG
+scripts/config --enable NFT_REJECT
+scripts/config --enable NFT_NAT
+scripts/config --enable NFT_MASQ
+scripts/config --enable NF_CT_NETLINK
+scripts/config --enable NF_NAT
+scripts/config --enable NF_NAT_IPV4
+scripts/config --enable NF_NAT_IPV6   
+
 # IPv6
 scripts/config --enable IPV6
 scripts/config --enable IPV6_SIT
@@ -429,7 +445,99 @@ scripts/config --disable MZEN5
 scripts/config --disable MZEN6
 scripts/config --disable MZEN
 scripts/config --disable MZENC
+
+
+
+
+scripts/config --enable NF_TABLES_IPV4
+scripts/config --enable NF_TABLES_IPV6
+scripts/config --enable NF_TABLES_ARP
+scripts/config --enable NFT_CT
+scripts/config --enable NFT_LIMIT
+scripts/config --enable NFT_COUNTER
+scripts/config --enable NFT_LOG
+scripts/config --enable NFT_REJECT
+scripts/config --enable NFT_NAT
+scripts/config --enable NFT_MASQ
+scripts/config --enable NF_CT_NETLINK
+scripts/config --enable NF_NAT
+scripts/config --enable NF_NAT_IPV4
+scripts/config --enable NF_NAT_IPV6   
+
+scripts/config --enable NTFS3_64BIT_CLUSTER
+scripts/config --enable NTFS3_LZX_XPRESS
+scripts/config --enable NTFS3_FS_POSIX_ACL
+
+
+
+
 scripts/config --enable MCORE2   
+
+scripts/config --enable USB_USBNET
+scripts/config --enable USB_NET_RNDIS_HOST
+
+
+
+
+
+
+
+
+
+
+
+# WiFi:
+scripts/config --enable IWL3945
+scripts/config --enable IWLEGACY
+
+# nftables/firewalld sub-options:
+scripts/config --enable NF_CONNTRACK_EVENTS
+scripts/config --enable NF_CONNTRACK_ZONES
+scripts/config --enable NF_CONNTRACK_PROCFS
+scripts/config --enable NF_CONNTRACK_TIMEOUT
+scripts/config --enable NF_CONNTRACK_TIMESTAMP
+scripts/config --enable NF_CONNTRACK_LABELS
+scripts/config --enable NETFILTER_FAMILY_BRIDGE
+scripts/config --enable BPF_SYSCALL
+scripts/config --enable BPF_JIT
+
+# NTFS3 (from earlier):
+scripts/config --enable NTFS3_64BIT_CLUSTER
+scripts/config --enable NTFS3_LZX_XPRESS
+scripts/config --enable NTFS3_FS_POSIX_ACL
+
+# uinput (from earlier):
+scripts/config --enable INPUT_MISC
+scripts/config --enable INPUT_UINPUT
+
+# RNDIS (already there, but confirm):
+scripts/config --enable USB_USBNET
+scripts/config --enable USB_NET_RNDIS_HOST
+
+
+# Fix the iwlwifi path (was wrong before):
+scripts/config --set-str EXTRA_FIRMWARE "intel-ucode/06-0f-0d intel/iwlwifi/iwlwifi-3945-2.ucode"
+scripts/config --set-str EXTRA_FIRMWARE_DIR "/lib/firmware"
+
+# Verify:
+grep "EXTRA_FIRMWARE" .config
+# Should show:
+# CONFIG_EXTRA_FIRMWARE="intel-ucode/06-0f-0d intel/iwlwifi/iwlwifi-3945-2.ucode"
+# CONFIG_EXTRA_FIRMWARE_DIR="/lib/firmware"   
+
+
+
+
+
+
+scripts/config --disable X86_VERBOSE_BOOTUP
+
+
+scripts/config --enable INPUT_MISC
+scripts/config --enable INPUT_UINPUT
+grep "^CONFIG_INPUT_UINPUT=" .config
+# Must show: CONFIG_INPUT_UINPUT=y   
+
 
 echo olddefconfig
 make olddefconfig
@@ -438,7 +546,7 @@ echo verify
 echo ============================================================================
 # Re-verify:
 for sym in \
-  X86_64 MCORE2 SMP CC_OPTIMIZE_FOR_PERFORMANCE \
+  X86_64 MCORE2 SMP CC_OPTIMIZE_FOR_PERFORMANCE INPUT\
   PCI PCI_HOST_BRIDGE AGP AGP_INTEL \
   ACPI ACPI_BUTTON ACPI_VIDEO ACPI_WMI WMI WMI_BUILTIN \
   DMI DMI_ID DELL_WMI DELL_SMBIOS DELL_RBTN \
@@ -472,3 +580,4 @@ echo ===========================================================================
 echo Modules
 echo ============================================================================
 grep =m .config
+
