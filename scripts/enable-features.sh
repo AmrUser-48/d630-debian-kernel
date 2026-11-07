@@ -1,7 +1,7 @@
 #!/bin/bash
 # enable-features.sh — Dell Latitude D630 (T7250 / GMA X3100 / ICH8-M)
 # Run from kernel source root, after `make tinyconfig`
-set -e
+#set -e
 # --- These are under "Removable kernel features for embedded systems" ---
 scripts/config --enable EMBEDDED
 scripts/config --enable BASE_FULL
@@ -832,6 +832,42 @@ scripts/config --enable MOUSE_PS2_SYNAPTICS
 scripts/config --enable MOUSE_PS2_SYNAPTICS_SMBUS
 scripts/config --enable MOUSE_PS2_ELANTECH
 scripts/config --enable MOUSE_PS2_FOCALTECH   
+
+
+
+
+
+
+
+scripts/config --enable MOUSE_PS2
+scripts/config --enable MOUSE_PS2_ALPS
+scripts/config --enable MOUSE_PS2_SYNAPTICS
+scripts/config --enable MOUSE_PS2_SYNAPTICS_SMBUS
+scripts/config --enable MOUSE_PS2_ELANTECH
+scripts/config --enable MOUSE_PS2_FOCALTECH   
+
+scripts/config --enable CRYPTO
+scripts/config --enable CRYPTO_LZO
+scripts/config --enable CRYPTO_LZ4
+scripts/config --enable CRYPTO_ZSTD
+scripts/config --enable ZRAM   
+
+scripts/config --enable MOUSE_PS2
+scripts/config --enable MOUSE_PS2_ALPS
+scripts/config --enable MOUSE_PS2_SYNAPTICS
+scripts/config --enable MOUSE_PS2_SYNAPTICS_SMBUS
+scripts/config --enable CRYPTO
+scripts/config --enable CRYPTO_LZO
+scripts/config --enable CRYPTO_LZ4
+scripts/config --enable CRYPTO_ZSTD
+scripts/config --enable ZRAM
+
+
+
+
+
+
+
 # ============================================================
 # Final
 # ============================================================
