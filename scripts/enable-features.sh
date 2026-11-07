@@ -2,6 +2,40 @@
 # enable-features.sh — Dell Latitude D630 (T7250 / GMA X3100 / ICH8-M)
 # Run from kernel source root, after `make tinyconfig`
 set -e
+# --- These are under "Removable kernel features for embedded systems" ---
+scripts/config --enable EMBEDDED
+scripts/config --enable BASE_FULL
+scripts/config --enable FUTEX
+scripts/config --enable FUTEX_PI
+scripts/config --enable EPOLL
+scripts/config --enable SIGNALFD
+scripts/config --enable TIMERFD
+scripts/config --enable EVENTFD
+scripts/config --enable SHMEM
+scripts/config --enable AIO
+scripts/config --enable ADVISE_SYSCALLS
+scripts/config --enable MEMBARRIER
+scripts/config --enable RSEQ
+scripts/config --enable KALLSYMS
+scripts/config --enable POSIX_TIMERS
+scripts/config --enable SYSFS_SYSCALL
+scripts/config --enable SGETMASK_SYSCALL
+scripts/config --enable MULTIUSER
+
+# --- Namespaces (Debian initrd uses mount/pid namespaces) ---
+scripts/config --enable NAMESPACES
+scripts/config --enable USER_NS
+scripts/config --enable PID_NS
+scripts/config --enable MOUNT_NS
+scripts/config --enable NET_NS
+scripts/config --enable UTS_NS
+scripts/config --enable IPC_NS
+scripts/config --enable CGROUPS
+
+# --- Other things the Debian initrd needs ---
+scripts/config --enable INOTIFY_USER
+scripts/config --enable FHANDLE
+scripts/config --enable UNIX
 
 # --- DRM / GPU chain ---
 scripts/config --enable DRM
