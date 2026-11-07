@@ -1,0 +1,5 @@
+for sym in FUTEX EPOLL SHMEM UNIX INOTIFY_USER AIO POSIX_TIMERS \
+           NAMESPACES CGROUPS SYSCTL FHANDLE KALLSYMS MULTIUSER \
+           TMPFS DEVTMPFS PROC_FS SYSFS; do
+  grep -q "^CONFIG_${sym}=y" .config || echo "MISSING: $sym"
+done   
