@@ -11,3 +11,4 @@
 *.buildinfo
 *.orig.tar.*
 *.debian.tar.*
+tinycore/
