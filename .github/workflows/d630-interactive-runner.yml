@@ -178,7 +178,7 @@ jobs:
           export BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
           export MAKEFLAGS="${MAKEFLAGS:--j$BUILD_JOBS}"
           [[ -r "$HOME/.config/lf/icons" ]] && source "$HOME/.config/lf/icons"
-          builtin cd -- "$D630_WORKSPACE"
+          . /usr/share/bash-completion/bash_completion
           EOF
           chmod 0600 "$HOME/.config/d630-runner/env"
 
