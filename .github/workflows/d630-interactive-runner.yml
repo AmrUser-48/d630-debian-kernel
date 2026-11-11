@@ -265,7 +265,7 @@ jobs:
           nohup "$HOME/.local/bin/desktop-commander" remote \
             >>"$RUNNER_TEMP/desktop-commander-remote.log" 2>&1 </dev/null &
           REMOTE_PID=$!
-          printf '%s\\n' "$REMOTE_PID" > "$RUNNER_TEMP/desktop-commander-remote.pid"
+          printf '%s\n' "$REMOTE_PID" > "$RUNNER_TEMP/desktop-commander-remote.pid"
           sleep 3
           if ! kill -0 "$REMOTE_PID" 2>/dev/null; then
             echo "::error::Desktop Commander Remote exited during startup; inspect the runner's remote log."
