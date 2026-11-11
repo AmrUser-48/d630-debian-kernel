@@ -203,11 +203,15 @@ jobs:
           bash -n "$HOME/.local/lib/bash-command-timer/bash_command_timer.sh"
           nvim --headless -u "$HOME/.config/nvim/init.lua" +qa
 
-      - name: Authenticate GitHub CLI for this repository
+      - name: Authenticate GitHub CLI with repository administration token
         env:
-          GH_TOKEN_INPUT: ${{ github.token }}
+          GH_TOKEN_INPUT: ${{ secrets.GH_PAT }}
         run: |
           set -Eeuo pipefail
+          if [[ -z "$GH_TOKEN_INPUT" ]]; then
+            echo "::error::Repository secret GH_PAT is required. Create a fine-grained PAT with access to the repositories the runner must manage."
+            exit 1
+          fi
           printf '%s\n' "$GH_TOKEN_INPUT" |
             gh auth login --hostname github.com --with-token
           gh auth setup-git
