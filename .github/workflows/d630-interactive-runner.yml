@@ -218,6 +218,62 @@ jobs:
           hostname: d630-runner-${{ github.run_id }}
           use-cache: "true"
 
+      - name: Set up Node.js for Desktop Commander Remote
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install and start Desktop Commander Remote MCP
+        env:
+          DESKTOP_COMMANDER_DEVICE_B64: ${{ secrets.DESKTOP_COMMANDER_DEVICE_B64 }}
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "$DESKTOP_COMMANDER_DEVICE_B64" ]]; then
+            echo "::error::Repository secret DESKTOP_COMMANDER_DEVICE_B64 is required."
+            exit 1
+          fi
+
+          node --version
+          npm --version
+          node -e '
+            const [major, minor] = process.versions.node.split(".").map(Number);
+            if (major < 22 || (major === 22 && minor < 12)) {
+              console.error("Desktop Commander Remote requires Node.js 22.12 or newer.");
+              process.exit(1);
+            }
+          '
+
+          # Restore only the device session and MQTT credentials; never restore local logs.
+          printf '%s' "$DESKTOP_COMMANDER_DEVICE_B64" |
+            base64 --decode |
+            tar -xz -C "$HOME"
+
+          DC_DIR="$HOME/.desktop-commander-device"
+          test -s "$DC_DIR/device.json"
+          test -s "$DC_DIR/.mqtt/identity.json"
+          test -s "$DC_DIR/.mqtt/certificate.json"
+          chmod 0700 "$DC_DIR" "$DC_DIR/.mqtt"
+          chmod 0600 "$DC_DIR/device.json" "$DC_DIR/.mqtt/identity.json" "$DC_DIR/.mqtt/certificate.json"
+
+          # Install the current published Remote Device package for this runner session.
+          npm install --global --prefix "$HOME/.local" @wonderwhy-er/desktop-commander@latest
+          test -x "$HOME/.local/bin/desktop-commander"
+
+          # Keep the Remote Device connected for the lifetime of this interactive runner.
+          nohup "$HOME/.local/bin/desktop-commander" remote \
+            >>"$RUNNER_TEMP/desktop-commander-remote.log" 2>&1 </dev/null &
+          REMOTE_PID=$!
+          printf '%s\\n' "$REMOTE_PID" > "$RUNNER_TEMP/desktop-commander-remote.pid"
+          sleep 3
+          if ! kill -0 "$REMOTE_PID" 2>/dev/null; then
+            echo "::error::Desktop Commander Remote exited during startup; inspect the runner's remote log."
+            exit 1
+          fi
+          echo "Desktop Commander Remote started (PID $REMOTE_PID)."
+          echo "Device credentials restored from DESKTOP_COMMANDER_DEVICE_B64."
+
       - name: Start SSH on the Tailscale interface
         run: |
           set -Eeuo pipefail
