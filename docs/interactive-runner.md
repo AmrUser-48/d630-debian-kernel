@@ -43,7 +43,7 @@ Then add it without putting the token in shell history:
 gh secret set GH_PAT -R AmrUser-48/d630-debian-kernel
 ```
 
-The interactive workflow exports `GH_PAT` as `GH_TOKEN` for the remaining job steps and configures Git's GitHub CLI credential helper. This makes the token available to `gh`, Git operations, and Desktop Commander Remote for the lifetime of the runner. This is intentionally powerful: a compromised process on the runner could modify or delete any repository granted to the token. Limit the token to the repositories you actually want managed, and cancel the runner when finished. The workflow's built-in `GITHUB_TOKEN` remains separately restricted by its declared `permissions`.
+The interactive workflow stores the token in `~/.config/d630-runner/gh-token` with mode `0600`, configures Git's GitHub CLI credential helper, and exports it as `GH_TOKEN` in interactive Bash shells. The Desktop Commander Remote process also receives `GH_TOKEN` directly. This makes the PAT available to `gh`, Git operations, SSH sessions, and the connected MCP tools for the runner's lifetime. This is intentionally powerful: a compromised process on the runner could modify or delete any repository granted to the token. Limit the token to the repositories you actually want managed, and cancel the runner when finished. The workflow's built-in `GITHUB_TOKEN` remains separately restricted by its declared `permissions`.
 
 The client machine must be logged into the same tailnet. The tailnet ACL must allow the client to reach `tag:d630-runner` over TCP 22 and the UDP ports used by Mosh (default range 60000–61000). Do not expose SSH on the public interface.
 
