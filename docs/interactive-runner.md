@@ -13,11 +13,11 @@ Configure these GitHub Actions repository secrets in `AmrUser-48/d630-debian-ker
 Create this secret from the machine that already has the authenticated `~/.desktop-commander-device` directory. Only the three credential files are archived; diagnostic logs are deliberately excluded:
 
 ```bash
-tar -C "$HOME" -czf - \\
-  .desktop-commander-device/device.json \\
-  .desktop-commander-device/.mqtt/identity.json \\
-  .desktop-commander-device/.mqtt/certificate.json \\
-  | base64 -w0 \\
+tar -C "$HOME" -czf - \
+  .desktop-commander-device/device.json \
+  .desktop-commander-device/.mqtt/identity.json \
+  .desktop-commander-device/.mqtt/certificate.json \
+  | base64 -w0 \
   | gh secret set DESKTOP_COMMANDER_DEVICE_B64 -R AmrUser-48/d630-debian-kernel
 ```
 
