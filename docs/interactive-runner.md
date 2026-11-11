@@ -8,6 +8,24 @@ Configure these GitHub Actions repository secrets in `AmrUser-48/d630-debian-ker
 
 - `SSH_PUBLIC_KEY`: the public half of `~/.ssh/id_ed25519_macos_runner`. The private key stays on the client.
 - `TAILSCALE_AUTHKEY`: a Tailscale auth key accepted by the tailnet. The workflow passes it to `tailscale/github-action@v4`.
+- `DESKTOP_COMMANDER_DEVICE_B64`: a base64-encoded gzip archive containing the Remote Device session and MQTT credentials. The runner restores it into `~/.desktop-commander-device`.
+
+Create this secret from the machine that already has the authenticated `~/.desktop-commander-device` directory. Only the three credential files are archived; diagnostic logs are deliberately excluded:
+
+```bash
+tar -C "$HOME" -czf - \\
+  .desktop-commander-device/device.json \\
+  .desktop-commander-device/.mqtt/identity.json \\
+  .desktop-commander-device/.mqtt/certificate.json \\
+  | base64 -w0 \\
+  | gh secret set DESKTOP_COMMANDER_DEVICE_B64 -R AmrUser-48/d630-debian-kernel
+```
+
+Check secret names, not values, with:
+
+```bash
+gh secret list -R AmrUser-48/d630-debian-kernel
+```
 
 The client machine must be logged into the same tailnet. The tailnet ACL must allow the client to reach `tag:d630-runner` over TCP 22 and the UDP ports used by Mosh (default range 60000–61000). Do not expose SSH on the public interface.
 
@@ -37,6 +55,12 @@ Reconnect to an existing runner with:
 The client function must not use `exec "$HOME/.deb-runner"`; invoke the script as a child so disconnecting from Mosh returns to the local shell.
 
 The workflow log prints the runner's Tailscale hostname, IPv4 address, and SSH host-key fingerprint. The runner is ephemeral; cancel the workflow to terminate it, or let the six-hour limit expire.
+
+## Desktop Commander Remote MCP
+
+The runner uses the `@wonderwhy-er/desktop-commander` npm package. The workflow sets up Node.js 24, restores the saved device credentials, installs the package, and starts `desktop-commander remote` in the background. The process remains available while the interactive workflow is running.
+
+This is the **Desktop Commander Remote Device** process, not a separate MCP server hosted by GitHub. It connects the runner to the Desktop Commander Remote MCP service; tool execution occurs locally as the `runner` account. The persisted credentials allow restarts without repeating browser pairing. Keep the `DESKTOP_COMMANDER_DEVICE_B64` secret private.
 
 ## Installed user configuration
 
