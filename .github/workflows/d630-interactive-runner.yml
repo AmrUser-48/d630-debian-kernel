@@ -214,7 +214,7 @@ jobs:
           fi
 
           # Fine-grained PATs are supplied to gh through GH_TOKEN (not gh auth login --with-token).
-          printf 'GH_TOKEN=%s\\n' "$GH_PAT" >> "$GITHUB_ENV"
+          printf 'GH_TOKEN=%s\n' "$GH_PAT" >> "$GITHUB_ENV"
           export GH_TOKEN="$GH_PAT"
           gh auth setup-git --hostname github.com
           git config --global init.defaultBranch main
