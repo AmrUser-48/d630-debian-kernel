@@ -9,7 +9,7 @@ Configure these GitHub Actions repository secrets in `AmrUser-48/d630-debian-ker
 - `SSH_PUBLIC_KEY`: the public half of `~/.ssh/id_ed25519_macos_runner`. The private key stays on the client.
 - `TAILSCALE_AUTHKEY`: a Tailscale auth key accepted by the tailnet. The workflow passes it to `tailscale/github-action@v4`.
 - `DESKTOP_COMMANDER_DEVICE_B64`: a base64-encoded gzip archive containing the Remote Device session and MQTT credentials. The runner restores it into `~/.desktop-commander-device`.
-- `GH_PAT`: a fine-grained personal access token used by GitHub CLI and Git credential setup on the interactive runner. It replaces the limited workflow `GITHUB_TOKEN` for `gh`/Git operations.
+- `GH_PAT`: your classic personal access token (the token format starts with `ghp_`). It is used by GitHub CLI, Git, SSH shells, and Desktop Commander Remote on the interactive runner. It replaces the limited workflow `GITHUB_TOKEN` for those operations.
 
 Create this secret from the machine that already has the authenticated `~/.desktop-commander-device` directory. Only the three credential files are archived; diagnostic logs are deliberately excluded:
 
@@ -28,22 +28,23 @@ Check secret names, not values, with:
 gh secret list -R AmrUser-48/d630-debian-kernel
 ```
 
-### Create the runner GitHub token
+### Use your existing classic token
 
-Create a fine-grained PAT at <https://github.com/settings/personal-access-tokens/new>:
+A classic personal access token starts with `ghp_`; you do not need to create a fine-grained token. It must already have the scopes required for the operations you expect:
 
-1. Set **Resource owner** to `AmrUser-48`.
-2. Set **Repository access** to **All repositories**.
-3. Give the repositories the permissions the runner must administer. For broad repository management, enable read/write for **Administration, Actions, Contents, Deployments, Environments, Issues, Pull requests, Secrets, Variables, Webhooks, Checks, Commit statuses, Discussions, and Workflows** where offered. Keep **Metadata** at read-only.
-4. Set an expiration compatible with your account policy. Rotate the token before it expires.
+- `repo`: full access to repositories you can access, including code, collaborators, invitations, and repository webhooks.
+- `workflow`: create and update GitHub Actions workflow files.
+- `read:org` and `gist`: the minimum additional scopes required by GitHub CLI's classic-token authentication.
 
-Then add it without putting the token in shell history:
+Add the existing token to the repository secret. Run this on your own machine; `gh secret set` prompts for the value without placing it in shell history:
 
 ```bash
 gh secret set GH_PAT -R AmrUser-48/d630-debian-kernel
 ```
 
-The interactive workflow stores the token in `~/.config/d630-runner/gh-token` with mode `0600`, configures Git's GitHub CLI credential helper, and exports it as `GH_TOKEN` in interactive Bash shells. The Desktop Commander Remote process also receives `GH_TOKEN` directly. This makes the PAT available to `gh`, Git operations, SSH sessions, and the connected MCP tools for the runner's lifetime. This is intentionally powerful: a compromised process on the runner could modify or delete any repository granted to the token. Limit the token to the repositories you actually want managed, and cancel the runner when finished. The workflow's built-in `GITHUB_TOKEN` remains separately restricted by its declared `permissions`.
+The workflow stores the token in `~/.config/d630-runner/gh-token` with mode `0600`, configures Git's GitHub CLI credential helper, and exports it as `GH_TOKEN` in interactive Bash shells. Desktop Commander Remote also receives `GH_TOKEN` directly. This makes the token available to `gh`, Git operations, SSH sessions, and the connected MCP tools for the runner's lifetime.
+
+A classic token with `repo` scope can access every public and private repository your account can access. Treat it as an account-wide credential. A compromised process on the runner could modify repositories or collaborators within that reach. Keep the token private and cancel the runner when finished. The workflow's built-in `GITHUB_TOKEN` remains separately restricted by its declared `permissions`.
 
 The client machine must be logged into the same tailnet. The tailnet ACL must allow the client to reach `tag:d630-runner` over TCP 22 and the UDP ports used by Mosh (default range 60000–61000). Do not expose SSH on the public interface.
 
