@@ -213,8 +213,13 @@ jobs:
             exit 1
           fi
 
-          # Fine-grained PATs are supplied to gh through GH_TOKEN (not gh auth login --with-token).
-          printf 'GH_TOKEN=%s\n' "$GH_PAT" >> "$GITHUB_ENV"
+          # Keep the token readable only by the runner account.
+          install -d -m 0700 "$HOME/.config/d630-runner"
+          umask 077
+          printf '%s' "$GH_PAT" > "$HOME/.config/d630-runner/gh-token"
+          chmod 0600 "$HOME/.config/d630-runner/gh-token"
+
+          # Fine-grained PATs are supplied to gh through GH_TOKEN.
           export GH_TOKEN="$GH_PAT"
           gh auth setup-git --hostname github.com
           git config --global init.defaultBranch main
@@ -223,6 +228,14 @@ jobs:
           git config --global core.pager 'less -FRX'
           git config --global user.name "$GITHUB_ACTOR"
           git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+
+          # Make gh and Git use this token in later SSH login shells.
+          cat >> "$HOME/.bashrc" <<'EOF'
+          if [[ -r "$HOME/.config/d630-runner/gh-token" ]]; then
+            export GH_TOKEN="$(<"$HOME/.config/d630-runner/gh-token")"
+          fi
+          EOF
+
           gh auth status
           git --version
           gh --version
@@ -243,11 +256,16 @@ jobs:
       - name: Install and start Desktop Commander Remote MCP
         env:
           DESKTOP_COMMANDER_DEVICE_B64: ${{ secrets.DESKTOP_COMMANDER_DEVICE_B64 }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           set -Eeuo pipefail
 
           if [[ -z "$DESKTOP_COMMANDER_DEVICE_B64" ]]; then
             echo "::error::Repository secret DESKTOP_COMMANDER_DEVICE_B64 is required."
+            exit 1
+          fi
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::Repository secret GH_PAT is required."
             exit 1
           fi
 
