@@ -27,6 +27,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate Desktop Commander device secret
+        env:
+          DESKTOP_COMMANDER_DEVICE_B64: ${{ secrets.DESKTOP_COMMANDER_DEVICE_B64 }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$DESKTOP_COMMANDER_DEVICE_B64" ]]; then
+            echo "::error::Add repository secret DESKTOP_COMMANDER_DEVICE_B64 before starting this runner."
+            exit 1
+          fi
+
       - name: Fetch Debian 12 user configurations
         run: |
           set -Eeuo pipefail
