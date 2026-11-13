@@ -592,6 +592,33 @@ jobs:
             echo "Worker $worker_ip passed a remote-only compile probe."
           done
 
+          # Make the leader's own four allocated CPUs available to distcc too.
+          sudo systemctl stop distcc.service 2>/dev/null || true
+          sudo pkill -x distccd 2>/dev/null || true
+          mkdir -p "$RUNNER_TEMP/distcc-master"
+          distccd --daemon \
+            --listen 127.0.0.1 \
+            --port 3632 \
+            --allow 127.0.0.1/32 \
+            --jobs 4 \
+            --log-file "$RUNNER_TEMP/distcc-master/distccd.log" \
+            --pid-file "$RUNNER_TEMP/distcc-master/distccd.pid"
+
+          for attempt in {1..15}; do
+            if ss -H -ltn 'sport = :3632' | grep -Fq '127.0.0.1:3632'; then
+              break
+            fi
+            sleep 1
+          done
+          ss -H -ltn 'sport = :3632' | grep -Fq '127.0.0.1:3632' || {
+            echo "::error::Leader distccd failed to listen on loopback."
+            cat "$RUNNER_TEMP/distcc-master/distccd.log" || true
+            exit 1
+          }
+          DISTCC_FALLBACK=0 DISTCC_HOSTS=localhost/4 \
+            distcc gcc -c "$RUNNER_TEMP/distcc-probe/probe.c" \
+              -o "$RUNNER_TEMP/distcc-probe/master.o"
+
           DISTCC_HOSTS_VALUE="localhost/4"
           for worker_ip in "${WORKER_IPS[@]}"; do
             DISTCC_HOSTS_VALUE+=" $worker_ip/4"
