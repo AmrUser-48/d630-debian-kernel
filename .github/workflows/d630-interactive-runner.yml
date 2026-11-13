@@ -342,7 +342,7 @@ D630_DEFAULT_SSH_KEY
 
           mkdir -p "$D630_TMPDIR"
           STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-          ARCHIVE="$D630_TMPDIR/d630-workspace-$STAMP-$.tar.zst"
+          ARCHIVE="$D630_TMPDIR/d630-workspace-$STAMP-${BASHPID}.tar.zst"
           echo "Snapshotting workspace: $D630_WORKSPACE"
           tar --zstd -cf "$ARCHIVE" \
             --exclude='./.git' --exclude='./.git/**' --exclude='*/.git' --exclude='*/.git/**' \
