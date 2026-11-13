@@ -125,11 +125,16 @@ jobs:
             sudo apt-get purge --yes "${VIM_PACKAGES[@]}"
           fi
 
+          cd
+          tldr -u &
+          curl -O https://github.com/AmrUser-48/agy-open/releases/latest/download/agy
+          curl -fsSL https://raw.githubusercontent.com/AmrUser-48/agy-open/main/install-completion.sh | sh
+
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             openssh-server mosh \
             git gh \
-            neovim lf fd-find ripgrep fzf tmux htop jq tree bat less bash-completion \
+            neovim lf fd-find ripgrep fzf tmux tealdeer screen htop jq tree bat less bash-completion \
             file unzip zip xdg-utils libfile-mimeinfo-perl \
             build-essential bc bison flex \
             libssl-dev libelf-dev libncurses-dev dwarves \
