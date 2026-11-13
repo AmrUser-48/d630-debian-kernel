@@ -1,0 +1,134 @@
+name: D630 distcc Worker
+run-name: "D630 distcc cluster ${{ inputs.cluster_id }} worker ${{ inputs.worker_slot }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster_id:
+        description: "Leader GitHub Actions run ID"
+        required: true
+        type: string
+      master_ip:
+        description: "Leader Tailscale IPv4 address"
+        required: true
+        type: string
+      worker_slot:
+        description: "Worker slot (01–18)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d630-distcc-${{ inputs.cluster_id }}-${{ inputs.worker_slot }}
+  cancel-in-progress: true
+
+jobs:
+  worker:
+    name: distccd worker ${{ inputs.worker_slot }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      LANG: C.UTF-8
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Validate cluster assignment
+        env:
+          CLUSTER_ID: ${{ inputs.cluster_id }}
+          MASTER_IP: ${{ inputs.master_ip }}
+          WORKER_SLOT: ${{ inputs.worker_slot }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$CLUSTER_ID" =~ ^[0-9]+$ ]] || { echo "::error::Invalid cluster ID."; exit 1; }
+          [[ "$WORKER_SLOT" =~ ^(0[1-9]|1[0-8])$ ]] || { echo "::error::Worker slot must be 01–18."; exit 1; }
+          [[ "$MASTER_IP" =~ ^100\.([0-9]{1,3}\.){2}[0-9]{1,3}$ ]] || { echo "::error::Master must use a Tailscale IPv4 address."; exit 1; }
+
+      - name: Join leader Tailscale network
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          hostname: d630-distcc-${{ inputs.cluster_id }}-w${{ inputs.worker_slot }}
+          use-cache: "true"
+
+      - name: Install compiler and start restricted distccd
+        env:
+          CLUSTER_ID: ${{ inputs.cluster_id }}
+          MASTER_IP: ${{ inputs.master_ip }}
+          WORKER_SLOT: ${{ inputs.worker_slot }}
+        run: |
+          set -Eeuo pipefail
+
+          sudo tailscale set --hostname="d630-distcc-$CLUSTER_ID-w$WORKER_SLOT"
+          WORKER_IP="$(tailscale ip -4)"
+          [[ "$WORKER_IP" =~ ^100\. ]] || { echo "::error::No Tailscale IPv4 address assigned."; exit 1; }
+
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends build-essential distcc
+
+          echo "Worker slot: $WORKER_SLOT"
+          echo "Worker hostname: d630-distcc-$CLUSTER_ID-w$WORKER_SLOT"
+          echo "Worker Tailscale IPv4: $WORKER_IP"
+          echo "Allowed master IPv4: $MASTER_IP"
+          echo "Compiler: $(gcc --version | head -n1)"
+          echo "Compiler target: $(gcc -dumpmachine)"
+          echo "distcc: $(distcc --version | head -n1)"
+          echo "distccd: $(distccd --version | head -n1)"
+
+          mkdir -p "$RUNNER_TEMP/distcc"
+          distccd --daemon \
+            --listen "$WORKER_IP" \
+            --port 3632 \
+            --allow "$MASTER_IP/32" \
+            --jobs 4 \
+            --log-file "$RUNNER_TEMP/distcc/distccd.log" \
+            --pid-file "$RUNNER_TEMP/distcc/distccd.pid"
+
+          for attempt in {1..15}; do
+            if ss -H -ltn 'sport = :3632' | grep -Fq "$WORKER_IP:3632"; then
+              break
+            fi
+            sleep 1
+          done
+          ss -H -ltnp 'sport = :3632'
+          ss -H -ltn 'sport = :3632' | grep -Fq "$WORKER_IP:3632" || {
+            echo "::error::distccd failed to listen on the Tailscale interface."
+            cat "$RUNNER_TEMP/distcc/distccd.log" || true
+            exit 1
+          }
+          echo "DISTCC_WORKER_READY slot=$WORKER_SLOT ip=$WORKER_IP jobs=4"
+
+      - name: Serve compilation until leader exits
+        env:
+          MASTER_IP: ${{ inputs.master_ip }}
+        run: |
+          set -Eeuo pipefail
+          echo "Worker is accepting distcc jobs from $MASTER_IP only."
+          MASTER_FAILURES=0
+          while true; do
+            if tailscale ping --timeout=5s "$MASTER_IP" >/dev/null 2>&1; then
+              MASTER_FAILURES=0
+            else
+              MASTER_FAILURES=$((MASTER_FAILURES + 1))
+              echo "Leader ping failed ($MASTER_FAILURES/3)."
+            fi
+            if (( MASTER_FAILURES >= 3 )); then
+              echo "Leader is gone; stopping this worker."
+              break
+            fi
+            sleep 60
+          done
+
+      - name: Stop distccd
+        if: always()
+        run: |
+          set +e
+          if [[ -s "$RUNNER_TEMP/distcc/distccd.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/distcc/distccd.pid")" 2>/dev/null || true
+          fi
+          pkill -u runner -x distccd 2>/dev/null || true
+          echo "distccd cleanup complete."
