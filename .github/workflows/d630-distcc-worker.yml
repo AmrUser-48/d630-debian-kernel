@@ -56,6 +56,10 @@ jobs:
           use-cache: "true"
 
       - name: Install compiler tools
+        env:
+          CLUSTER_ID: ${{ inputs.cluster_id }}
+          MASTER_IP: ${{ inputs.master_ip }}
+          WORKER_SLOT: ${{ inputs.worker_slot }}
         run: |
           set -Eeuo pipefail
 
