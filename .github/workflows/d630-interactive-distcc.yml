@@ -99,10 +99,6 @@ jobs:
           command -v lf
           command -v fdfind
           command -v git
-          [[ "$WORKER_COUNT" == "17" || "$WORKER_COUNT" == "18" ]] || {
-            echo "::error::Worker count must be 17 or 18."
-            exit 1
-          }
           command -v gh
           command -v mosh-server
 
@@ -522,10 +518,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           set -Eeuo pipefail
-
-          command -v gh
-          command -v distcc
-          command -v gcc
+          [[ "$WORKER_COUNT" == "17" || "$WORKER_COUNT" == "18" ]] || {
+            echo "::error::Worker count must be 17 or 18."
+            exit 1
+          }
           gh auth status
 
           MASTER_IP="$(tailscale ip -4)"
@@ -638,6 +634,9 @@ jobs:
             DISTCC_HOSTS_VALUE+=" $worker_ip/4"
           done
 
+          TOTAL_RUNNERS=$((WORKER_COUNT + 1))
+          TOTAL_VCPUS=$((TOTAL_RUNNERS * 4))
+          TOTAL_RAM_GB=$((TOTAL_RUNNERS * 16))
           install -d -m 0755 "$HOME/.config/d630-distcc" "$HOME/.cache/distcc"
           printf '%s\n' "${WORKER_IPS[@]}" > "$HOME/.config/d630-distcc/workers"
           {
@@ -660,9 +659,6 @@ jobs:
           source "$HOME/.config/d630-distcc/env"
           echo
           echo "D630 DISTCC CLUSTER READY"
-          TOTAL_RUNNERS=$((WORKER_COUNT + 1))
-          TOTAL_VCPUS=$((TOTAL_RUNNERS * 4))
-          TOTAL_RAM_GB=$((TOTAL_RUNNERS * 16))
           echo "Allocated: $TOTAL_RUNNERS runners x 4 vCPU = $TOTAL_VCPUS vCPU; $TOTAL_RUNNERS x 16 GB = $TOTAL_RAM_GB GB RAM."
           echo "distcc hosts:"
           distcc --show-hosts
