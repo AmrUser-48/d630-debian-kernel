@@ -3,6 +3,11 @@ run-name: "D630 interactive / ${{ github.ref_name }} / #${{ github.run_number }}
 
 on:
   workflow_dispatch:
+  # Also start the runner for the explicit repair commit; ordinary workflow edits do not launch it.
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/d630-interactive-runner.yml
 
 permissions:
   contents: write
@@ -11,6 +16,7 @@ permissions:
 
 jobs:
   interactive:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[start-d630-runner]')
     name: Interactive SSH / Ubuntu 24.04
     runs-on: ubuntu-24.04
     timeout-minutes: 360
@@ -51,11 +57,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          if [[ -z "$SSH_PUBLIC_KEY" ]]; then
-            echo "::error::Repository secret SSH_PUBLIC_KEY is required."
-            exit 1
-          fi
-
+          # SSH_PUBLIC_KEY remains optional; the built-in owner key is always installed below.
           if [[ -z "$TAILSCALE_AUTHKEY" ]]; then
             echo "::error::Repository secret TAILSCALE_AUTHKEY is required for Tailscale authentication."
             exit 1
@@ -150,13 +152,20 @@ jobs:
             }
           done
 
-          mkdir -p "$HOME/.ssh" "$HOME/.local/bin" "$HOME/.config/d630-runner" \
+          install -d -m 0700 "$HOME/.ssh"
+          install -d -m 0755 "$HOME/.local/bin" "$HOME/.config/d630-runner" \
             "$HOME/.local/lib/bash-command-timer" "$HOME/.trash"
-          printf '%s\n' "$SSH_PUBLIC_KEY" > "$RUNNER_TEMP/authorized_keys"
-          ssh-keygen -lf "$RUNNER_TEMP/authorized_keys" >/dev/null
-          chmod 0600 "$RUNNER_TEMP/authorized_keys"
-          cp "$RUNNER_TEMP/authorized_keys" "$HOME/.ssh/authorized_keys"
-          chmod 0600 "$HOME/.ssh/authorized_keys"
+          : > "$RUNNER_TEMP/authorized_keys"
+          if [[ -n "$SSH_PUBLIC_KEY" ]]; then
+            printf '%s\n' "$SSH_PUBLIC_KEY" >> "$RUNNER_TEMP/authorized_keys"
+          fi
+          cat >> "$RUNNER_TEMP/authorized_keys" <<'D630_DEFAULT_SSH_KEY'
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDX0Iq6/I6uP98Yd23xSKOSJIsMLncttaqvWnYHB5yfhpr4TQij9TG4h9Dwm27txqBEfhwQiM3LCjqcU2eKD5EWn2Bn+QB0dvu6aTN0oSeN0v7h0bXM+FSfKgT04YyjLbB8jqzv8CzQdW/A3hKWm19qIRuYBO5uowpLy1n+HzmWa3SHNQN+NeIMGRXou7xL+o9T2Q49f8IeqV1/8iCyLlJKjDrB+OalKY3CZiO5J0BwW5PZ6LG/jt66BiRYNpaKDSKkJm3DTqtiKtd78fGWOjjGbEUsjmKYllcSo3EziKj0XUTnSoiMxS3R63h2V0nxk8k6j4SF64vBgvujlhiFcfKQvBqw1cUNvzR9bPiNfVoC0gjvTmFPdnBJdGePS7I8mowxwnhj1gzl+aayXT6VHPkePQ/Yt6zUIucUyY6/WsGQsOj4F4ypYzZn+TXRVuEDs0G3f2I1h5yVGUm+R6wwwyIadTSpVgbXPhFbIHxk27qvY5ybLBv41hjepfIDXURRARE= jeroen@dell
+D630_DEFAULT_SSH_KEY
+          awk 'NF && !seen[$0]++' "$RUNNER_TEMP/authorized_keys" > "$RUNNER_TEMP/authorized_keys.dedup"
+          ssh-keygen -lf "$RUNNER_TEMP/authorized_keys.dedup" >/dev/null
+          install -m 0600 "$RUNNER_TEMP/authorized_keys.dedup" "$HOME/.ssh/authorized_keys"
+          chown -R "$(id -un):$(id -gn)" "$HOME/.ssh"
 
           # Deploy the Debian 12 shell, lf, bat, and complete vendored Neovim config.
           cp "$DOTFILES/.bashrc" "$HOME/.bashrc"
@@ -308,6 +317,109 @@ jobs:
           echo "Desktop Commander Remote started (PID $REMOTE_PID)."
           echo "Device credentials restored from DESKTOP_COMMANDER_DEVICE_B64."
 
+      - name: Install workspace snapshots and shutdown upload
+        run: |
+          set -Eeuo pipefail
+
+          cat > "$RUNNER_TEMP/d630-runner-snapshot.env" <<EOF
+          D630_WORKSPACE=$GITHUB_WORKSPACE
+          D630_REPOSITORY=$GITHUB_REPOSITORY
+          D630_RUN_ID=$GITHUB_RUN_ID
+          D630_SHA=$GITHUB_SHA
+          D630_TAG=d630-runner-$GITHUB_RUN_ID
+          D630_TMPDIR=$RUNNER_TEMP
+          EOF
+          sudo install -m 0600 -o runner -g runner "$RUNNER_TEMP/d630-runner-snapshot.env" /etc/default/d630-runner-snapshot
+
+          sudo tee /usr/local/sbin/d630-save-workspace >/dev/null <<'D630_SNAPSHOT_SCRIPT'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          export HOME=/home/runner
+          source /etc/default/d630-runner-snapshot
+          TOKEN_FILE="$HOME/.config/d630-runner/gh-token"
+          [[ -s "$TOKEN_FILE" ]] || { echo "Missing GitHub release token: $TOKEN_FILE" >&2; exit 1; }
+          export GH_TOKEN="$(<"$TOKEN_FILE")"
+
+          mkdir -p "$D630_TMPDIR"
+          STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          ARCHIVE="$D630_TMPDIR/d630-workspace-$STAMP-$.tar.zst"
+          echo "Snapshotting workspace: $D630_WORKSPACE"
+          tar --zstd -cf "$ARCHIVE" \
+            --exclude='./.git' --exclude='./.git/**' --exclude='*/.git' --exclude='*/.git/**' \
+            --exclude='./.ssh' --exclude='./.ssh/**' --exclude='*/.ssh' --exclude='*/.ssh/**' \
+            --exclude='./.env' --exclude='./.env.*' --exclude='*/.env' --exclude='*/.env.*' \
+            --exclude='*.pem' --exclude='*.p12' \
+            -C "$D630_WORKSPACE" .
+          ls -lh "$ARCHIVE"
+
+          if ! gh release view "$D630_TAG" --repo "$D630_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$D630_TAG" --repo "$D630_REPOSITORY" \
+              --title "D630 interactive runner #$D630_RUN_ID snapshots" \
+              --notes "Automatic workspace snapshots. Extract over a fresh checkout of the same repository." \
+              --prerelease --target "$D630_SHA"
+          fi
+          gh release upload "$D630_TAG" "$ARCHIVE" --repo "$D630_REPOSITORY"
+          rm -f "$ARCHIVE"
+          echo "Workspace snapshot uploaded to release $D630_TAG."
+          D630_SNAPSHOT_SCRIPT
+          sudo chmod 0755 /usr/local/sbin/d630-save-workspace
+
+          sudo tee /etc/systemd/system/d630-runner-shutdown-snapshot.service >/dev/null <<'D630_SHUTDOWN_UNIT'
+          [Unit]
+          Description=Upload D630 workspace before graceful shutdown
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          User=runner
+          Environment=HOME=/home/runner
+          EnvironmentFile=/etc/default/d630-runner-snapshot
+          ExecStart=/bin/true
+          ExecStop=/usr/local/sbin/d630-save-workspace
+          RemainAfterExit=yes
+          TimeoutStopSec=240
+
+          [Install]
+          WantedBy=multi-user.target
+          D630_SHUTDOWN_UNIT
+
+          sudo tee /etc/systemd/system/d630-runner-checkpoint.service >/dev/null <<'D630_CHECKPOINT_UNIT'
+          [Unit]
+          Description=Upload periodic D630 workspace checkpoint
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          User=runner
+          Environment=HOME=/home/runner
+          EnvironmentFile=/etc/default/d630-runner-snapshot
+          ExecStart=/usr/local/sbin/d630-save-workspace
+          TimeoutStartSec=240
+          D630_CHECKPOINT_UNIT
+
+          sudo tee /etc/systemd/system/d630-runner-checkpoint.timer >/dev/null <<'D630_CHECKPOINT_TIMER'
+          [Unit]
+          Description=Periodic D630 workspace checkpoint
+
+          [Timer]
+          OnBootSec=15min
+          OnUnitActiveSec=30min
+          AccuracySec=1min
+          Unit=d630-runner-checkpoint.service
+
+          [Install]
+          WantedBy=timers.target
+          D630_CHECKPOINT_TIMER
+
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now d630-runner-shutdown-snapshot.service
+          sudo systemctl enable --now d630-runner-checkpoint.timer
+          echo "Graceful-shutdown snapshot hook enabled."
+          echo "Automatic GitHub Release checkpoints: first at 15 minutes, then every 30 minutes."
+          echo "Manual snapshot command: sudo -u runner /usr/local/sbin/d630-save-workspace"
+
       - name: Start SSH on the Tailscale interface
         run: |
           set -Eeuo pipefail
@@ -319,7 +431,7 @@ jobs:
             exit 1
           }
 
-          sudo install -d -m 0755 /etc/ssh/sshd_config.d
+          sudo install -d -m 0755 /etc/ssh/sshd_config.d /run/sshd
           sudo tee /etc/ssh/sshd_config.d/60-d630-interactive.conf >/dev/null <<EOF
           Port 22
           ListenAddress $TAILSCALE_IP
@@ -340,12 +452,46 @@ jobs:
           MaxSessions 12
           EOF
 
-          sudo install -d -m 0755 /run/sshd
           sudo ssh-keygen -A
           sudo /usr/sbin/sshd -t
-          sudo systemctl enable --now ssh
-          sudo systemctl restart ssh
-          sudo ss -ltnp | grep -F "$TAILSCALE_IP:22"
+
+          # The hosted image may already have an sshd process. Stop it first so
+          # the Tailscale-only listener can bind port 22 without a stale conflict.
+          sudo systemctl stop ssh.socket 2>/dev/null || true
+          sudo systemctl stop ssh.service 2>/dev/null || true
+          sudo pkill -x sshd 2>/dev/null || true
+          sleep 1
+          sudo rm -f /run/sshd.pid
+          if pgrep -x sshd >/dev/null; then
+            echo "::error::A previous sshd process is still running."
+            pgrep -a -x sshd || true
+            exit 1
+          fi
+
+          # Run sshd directly rather than relying on the hosted image's systemd
+          # service unit, which failed during enable/restart in the previous run.
+          if ! sudo /usr/sbin/sshd -e; then
+            echo "::error::sshd failed to start; diagnostics follow."
+            sudo /usr/sbin/sshd -T | grep -E '^(port|listenaddress|authorizedkeysfile|allowusers) '
+            sudo journalctl -u ssh.service -n 60 --no-pager || true
+            exit 1
+          fi
+
+          for attempt in {1..10}; do
+            if sudo ss -H -ltnp 'sport = :22' | grep -F "$TAILSCALE_IP:22"; then
+              break
+            fi
+            sleep 1
+          done
+          LISTENERS="$(sudo ss -H -ltnp 'sport = :22' || true)"
+          printf '%s\n' "$LISTENERS"
+          grep -Fq "$TAILSCALE_IP:22" <<<"$LISTENERS" || {
+            echo "::error::sshd did not bind to $TAILSCALE_IP:22."
+            sudo journalctl -u ssh.service -n 60 --no-pager || true
+            pgrep -a -x sshd || true
+            exit 1
+          }
+          timeout 3 bash -c ":</dev/tcp/$TAILSCALE_IP/22"
 
           echo
           echo "D630 INTERACTIVE RUNNER READY"
@@ -364,9 +510,30 @@ jobs:
           df -h "$GITHUB_WORKSPACE"
 
       - name: Keep interactive runner available
+        timeout-minutes: 335
         run: |
           set -Eeuo pipefail
-          echo "Runner remains available until this workflow is cancelled or reaches its 6-hour timeout."
-          while true; do
-            sleep 300
-          done
+          echo "Runner remains available for 5 hours 30 minutes; the remaining job time is reserved for artifact upload."
+          sleep 19800
+
+      - name: Upload final workspace artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d630-runner-workspace-${{ github.run_id }}
+          path: |
+            ${{ github.workspace }}/
+            !${{ github.workspace }}/.git/**
+            !${{ github.workspace }}/**/.git/**
+            !${{ github.workspace }}/.ssh/**
+            !${{ github.workspace }}/**/.ssh/**
+            !${{ github.workspace }}/.env
+            !${{ github.workspace }}/.env.*
+            !${{ github.workspace }}/**/.env
+            !${{ github.workspace }}/**/.env.*
+            !${{ github.workspace }}/**/*.pem
+            !${{ github.workspace }}/**/*.p12
+          include-hidden-files: true
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: warn
