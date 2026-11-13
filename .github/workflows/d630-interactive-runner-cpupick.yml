@@ -7,7 +7,7 @@ on:
       min_cpu_mhz:
         description: "Minimum observed single-core frequency in MHz"
         required: true
-        default: "4000"
+        default: "3600"
         type: string
 
 permissions:
