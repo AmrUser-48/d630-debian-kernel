@@ -522,6 +522,9 @@ jobs:
             echo "::error::Worker count must be 17 or 18."
             exit 1
           }
+          command -v gh
+          command -v distcc
+          command -v gcc
           gh auth status
 
           MASTER_IP="$(tailscale ip -4)"
