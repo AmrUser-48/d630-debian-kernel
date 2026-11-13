@@ -55,11 +55,7 @@ jobs:
           hostname: d630-distcc-${{ inputs.cluster_id }}-w${{ inputs.worker_slot }}
           use-cache: "true"
 
-      - name: Install compiler and start restricted distccd
-        env:
-          CLUSTER_ID: ${{ inputs.cluster_id }}
-          MASTER_IP: ${{ inputs.master_ip }}
-          WORKER_SLOT: ${{ inputs.worker_slot }}
+      - name: Install compiler tools
         run: |
           set -Eeuo pipefail
 
@@ -70,7 +66,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends build-essential distcc
 
-          # The package may provide a service; the cluster starts its own restricted daemon.
+          # The package may provide a service; this workflow starts its own
+          # restricted daemon in the long-lived serving step below.
           sudo systemctl stop distcc.service 2>/dev/null || true
           sudo pkill -x distccd 2>/dev/null || true
 
@@ -83,7 +80,33 @@ jobs:
           echo "distcc: $(distcc --version | head -n1)"
           echo "distccd: $(distccd --version | head -n1)"
 
+      - name: Start distccd and serve compilation until leader exits
+        env:
+          CLUSTER_ID: ${{ inputs.cluster_id }}
+          MASTER_IP: ${{ inputs.master_ip }}
+          WORKER_SLOT: ${{ inputs.worker_slot }}
+        run: |
+          set -Eeuo pipefail
+
+          WORKER_IP="$(tailscale ip -4)"
+          [[ "$WORKER_IP" =~ ^100\. ]] || {
+            echo "::error::Worker has no Tailscale IPv4 address."
+            exit 1
+          }
+
           mkdir -p "$RUNNER_TEMP/distcc"
+          cleanup_distccd() {
+            if [[ -s "$RUNNER_TEMP/distcc/distccd.pid" ]]; then
+              kill "$(cat "$RUNNER_TEMP/distcc/distccd.pid")" 2>/dev/null || true
+            fi
+            pkill -u runner -x distccd 2>/dev/null || true
+            echo "distccd cleanup complete."
+          }
+          trap cleanup_distccd EXIT
+
+          # Keep daemon startup and the lifetime loop in the same Actions step.
+          # The runner cleans up orphaned processes between steps; starting
+          # distccd in an earlier step can therefore leave a dead listener.
           distccd --daemon \
             --listen "$WORKER_IP" \
             --port 3632 \
@@ -98,20 +121,16 @@ jobs:
             fi
             sleep 1
           done
-          ss -H -ltnp 'sport = :3632'
-          ss -H -ltn 'sport = :3632' | grep -Fq "$WORKER_IP:3632" || {
+          LISTENERS="$(ss -H -ltnp 'sport = :3632' || true)"
+          printf '%s\n' "$LISTENERS"
+          grep -Fq "$WORKER_IP:3632" <<<"$LISTENERS" || {
             echo "::error::distccd failed to listen on the Tailscale interface."
             cat "$RUNNER_TEMP/distcc/distccd.log" || true
             exit 1
           }
           echo "DISTCC_WORKER_READY slot=$WORKER_SLOT ip=$WORKER_IP jobs=4"
-
-      - name: Serve compilation until leader exits
-        env:
-          MASTER_IP: ${{ inputs.master_ip }}
-        run: |
-          set -Eeuo pipefail
           echo "Worker is accepting distcc jobs from $MASTER_IP only."
+
           MASTER_FAILURES=0
           while true; do
             if tailscale ping --timeout=5s "$MASTER_IP" >/dev/null 2>&1; then
@@ -124,7 +143,7 @@ jobs:
               echo "Leader is gone; stopping this worker."
               break
             fi
-            sleep 60
+            sleep 20
           done
 
       - name: Stop distccd
