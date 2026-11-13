@@ -68,7 +68,7 @@ jobs:
           [[ "$WORKER_IP" =~ ^100\. ]] || { echo "::error::No Tailscale IPv4 address assigned."; exit 1; }
 
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends build-essential distcc
+          sudo apt-get install --yes --no-install-recommends build-essential distcc gcc-14 g++-14
 
           # The package may provide a service; this workflow starts its own
           # restricted daemon in the long-lived serving step below.
@@ -79,8 +79,12 @@ jobs:
           echo "Worker hostname: d630-distcc-$CLUSTER_ID-w$WORKER_SLOT"
           echo "Worker Tailscale IPv4: $WORKER_IP"
           echo "Allowed master IPv4: $MASTER_IP"
-          echo "Compiler: $(gcc --version | head -n1)"
-          echo "Compiler target: $(gcc -dumpmachine)"
+          command -v x86_64-linux-gnu-gcc-14
+          command -v x86_64-linux-gnu-g++-14
+          echo "Default compiler: $(gcc --version | head -n1)"
+          echo "Debian 13 C compiler: $(x86_64-linux-gnu-gcc-14 --version | head -n1)"
+          echo "Debian 13 C++ compiler: $(x86_64-linux-gnu-g++-14 --version | head -n1)"
+          echo "Debian 13 compiler target: $(x86_64-linux-gnu-gcc-14 -dumpmachine)"
           echo "distcc: $(distcc --version | head -n1)"
           echo "distccd: $(distccd --version | head -n1)"
 
