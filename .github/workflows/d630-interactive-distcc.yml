@@ -615,11 +615,11 @@ jobs:
             cat "$RUNNER_TEMP/distcc-master/distccd.log" || true
             exit 1
           }
-          DISTCC_FALLBACK=0 DISTCC_HOSTS=localhost/4 \
+          DISTCC_FALLBACK=0 DISTCC_HOSTS=127.0.0.1/4 \
             distcc gcc -c "$RUNNER_TEMP/distcc-probe/probe.c" \
               -o "$RUNNER_TEMP/distcc-probe/master.o"
 
-          DISTCC_HOSTS_VALUE="localhost/4"
+          DISTCC_HOSTS_VALUE="127.0.0.1/4"
           for worker_ip in "${WORKER_IPS[@]}"; do
             DISTCC_HOSTS_VALUE+=" $worker_ip/4"
           done
