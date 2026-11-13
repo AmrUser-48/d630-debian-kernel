@@ -3,6 +3,15 @@ run-name: "D630 interactive distcc / ${{ github.ref_name }} / #${{ github.run_nu
 
 on:
   workflow_dispatch:
+    inputs:
+      worker_count:
+        description: "Number of helper runners (choose 17 while two existing jobs occupy the 20-job limit)"
+        required: true
+        default: "18"
+        type: choice
+        options:
+          - "18"
+          - "17"
 
 permissions:
   contents: write
@@ -90,6 +99,10 @@ jobs:
           command -v lf
           command -v fdfind
           command -v git
+          [[ "$WORKER_COUNT" == "17" || "$WORKER_COUNT" == "18" ]] || {
+            echo "::error::Worker count must be 17 or 18."
+            exit 1
+          }
           command -v gh
           command -v mosh-server
 
@@ -503,8 +516,9 @@ jobs:
           echo "Disk:"
           df -h "$GITHUB_WORKSPACE"
 
-      - name: Start 18 distcc workers and configure the compiler pool
+      - name: Start distcc workers and configure the compiler pool
         env:
+          WORKER_COUNT: ${{ inputs.worker_count }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           set -Eeuo pipefail
@@ -521,11 +535,11 @@ jobs:
           }
           echo "Leader run: $GITHUB_RUN_ID"
           echo "Master Tailscale IPv4: $MASTER_IP"
-          echo "Starting 18 independent worker workflow runs."
+          echo "Starting $WORKER_COUNT independent worker workflow runs."
 
           WORKER_WORKFLOW=d630-distcc-worker.yml
-          for slot in $(seq -w 1 18); do
-            echo "Dispatching distcc worker $slot/18..."
+          for slot in $(seq -w 1 "$WORKER_COUNT"); do
+            echo "Dispatching distcc worker $slot/$WORKER_COUNT..."
             gh workflow run "$WORKER_WORKFLOW" \
               --repo "$GITHUB_REPOSITORY" \
               --ref main \
@@ -536,7 +550,7 @@ jobs:
 
           WORKER_PREFIX="d630-distcc-$GITHUB_RUN_ID-w"
           WORKER_IPS=()
-          echo "Waiting up to 15 minutes for all 18 Tailscale workers..."
+          echo "Waiting up to 15 minutes for all $WORKER_COUNT Tailscale workers..."
           for attempt in {1..90}; do
             mapfile -t WORKER_IPS < <(
               tailscale status --json |
@@ -551,15 +565,15 @@ jobs:
                   | unique
                   | .[]'
             )
-            printf 'Online workers: %s/18\n' "${#WORKER_IPS[@]}"
-            if (( ${#WORKER_IPS[@]} == 18 )); then
+            printf 'Online workers: %s/%s\n' "${#WORKER_IPS[@]}" "$WORKER_COUNT"
+            if (( ${#WORKER_IPS[@]} == WORKER_COUNT )); then
               break
             fi
             sleep 10
           done
 
-          if (( ${#WORKER_IPS[@]} != 18 )); then
-            echo "::error::Only ${#WORKER_IPS[@]}/18 workers joined the tailnet."
+          if (( ${#WORKER_IPS[@]} != WORKER_COUNT )); then
+            echo "::error::Only ${#WORKER_IPS[@]}/$WORKER_COUNT workers joined the tailnet."
             tailscale status || true
             exit 1
           fi
@@ -572,7 +586,7 @@ jobs:
           for index in "${!WORKER_IPS[@]}"; do
             worker_ip="${WORKER_IPS[$index]}"
             object="$RUNNER_TEMP/distcc-probe/worker-$((index + 1)).o"
-            echo "Testing worker $((index + 1))/18 at $worker_ip..."
+            echo "Testing worker $((index + 1))/$WORKER_COUNT at $worker_ip..."
             worker_ok=0
             for attempt in {1..12}; do
               if timeout 45s env \
@@ -632,8 +646,8 @@ jobs:
             printf 'export CC=%q\n' 'distcc gcc'
             printf 'export CXX=%q\n' 'distcc g++'
             printf 'export CFLAGS=%q\n' '-O2 -pipe -march=core2 -mtune=core2'
-            printf 'export BUILD_JOBS=76\n'
-            printf 'export MAKEFLAGS=-j76\n'
+            printf 'export BUILD_JOBS=%s\n' "$TOTAL_VCPUS"
+            printf 'export MAKEFLAGS=-j%s\n' "$TOTAL_VCPUS"
           } > "$HOME/.config/d630-distcc/env"
           chmod 0644 "$HOME/.config/d630-distcc/env"
 
@@ -646,7 +660,10 @@ jobs:
           source "$HOME/.config/d630-distcc/env"
           echo
           echo "D630 DISTCC CLUSTER READY"
-          echo "Allocated: 19 runners x 4 vCPU = 76 vCPU; 19 x 16 GB = 304 GB RAM."
+          TOTAL_RUNNERS=$((WORKER_COUNT + 1))
+          TOTAL_VCPUS=$((TOTAL_RUNNERS * 4))
+          TOTAL_RAM_GB=$((TOTAL_RUNNERS * 16))
+          echo "Allocated: $TOTAL_RUNNERS runners x 4 vCPU = $TOTAL_VCPUS vCPU; $TOTAL_RUNNERS x 16 GB = $TOTAL_RAM_GB GB RAM."
           echo "distcc hosts:"
           distcc --show-hosts
           echo
