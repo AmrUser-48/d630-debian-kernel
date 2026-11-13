@@ -577,7 +577,52 @@ jobs:
             exit 1
           fi
 
-          echo "All workers joined. Verifying real remote compiler execution on every worker."
+          # A Tailscale peer can be online before its distccd listener exists.
+          # Probe all worker ports concurrently and do not start compilation until
+          # every worker accepts TCP connections on port 3632.
+          TCP_READY_DIR="$RUNNER_TEMP/distcc-tcp-ready"
+          mkdir -p "$TCP_READY_DIR"
+          NOT_READY_WORKERS=()
+          echo "All workers joined. Waiting for distccd TCP listeners (port 3632)..."
+          for attempt in {1..60}; do
+            rm -f "$TCP_READY_DIR"/*
+            TCP_CHECK_PIDS=()
+            for index in "${!WORKER_IPS[@]}"; do
+              worker_ip="${WORKER_IPS[$index]}"
+              (
+                if timeout 5 bash -c ':</dev/tcp/$1/3632' _ "$worker_ip" >/dev/null 2>&1; then
+                  : > "$TCP_READY_DIR/$index"
+                fi
+              ) &
+              TCP_CHECK_PIDS+=("$!")
+            done
+            for pid in "${TCP_CHECK_PIDS[@]}"; do
+              wait "$pid"
+            done
+
+            NOT_READY_WORKERS=()
+            for index in "${!WORKER_IPS[@]}"; do
+              if [[ ! -e "$TCP_READY_DIR/$index" ]]; then
+                NOT_READY_WORKERS+=("${WORKER_IPS[$index]}")
+              fi
+            done
+
+            if (("${#NOT_READY_WORKERS[@]}" == 0)); then
+              echo "All $WORKER_COUNT workers accept TCP connections on port 3632."
+              break
+            fi
+
+            printf 'Waiting for %s/%s distccd listeners: %s\n' \
+              "${#NOT_READY_WORKERS[@]}" "$WORKER_COUNT" "${NOT_READY_WORKERS[*]}"
+            if (( attempt == 60 )); then
+              echo "::error::Workers did not open distccd TCP port 3632 within five minutes."
+              tailscale status || true
+              exit 1
+            fi
+            sleep 5
+          done
+
+          echo "TCP readiness confirmed. Verifying real remote compiler execution on every worker."
           mkdir -p "$RUNNER_TEMP/distcc-probe"
           printf 'int d630_distcc_probe(void) { return 76; }\n' \
             > "$RUNNER_TEMP/distcc-probe/probe.c"
