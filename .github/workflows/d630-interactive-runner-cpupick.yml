@@ -127,7 +127,9 @@ jobs:
 
           cd
           tldr -u &
-          curl -O https://github.com/AmrUser-48/agy-open/releases/latest/download/agy
+          curl  -LOsf https://github.com/AmrUser-48/agy-open/releases/latest/download/agy
+          chmod +x agy
+          mv agy "$HOME/.local/bin/agy"
           curl -fsSL https://raw.githubusercontent.com/AmrUser-48/agy-open/main/install-completion.sh | sh
 
           sudo apt-get update
