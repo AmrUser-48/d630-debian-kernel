@@ -70,6 +70,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends build-essential distcc
 
+          # The package may provide a service; the cluster starts its own restricted daemon.
+          sudo systemctl stop distcc.service 2>/dev/null || true
+          sudo pkill -x distccd 2>/dev/null || true
+
           echo "Worker slot: $WORKER_SLOT"
           echo "Worker hostname: d630-distcc-$CLUSTER_ID-w$WORKER_SLOT"
           echo "Worker Tailscale IPv4: $WORKER_IP"
