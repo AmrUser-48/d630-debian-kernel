@@ -1,0 +1,675 @@
+name: D630 Interactive distcc
+run-name: "D630 interactive distcc / ${{ github.ref_name }} / #${{ github.run_number }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  interactive:
+    name: Interactive distcc master / Ubuntu 24.04
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      LANG: C.UTF-8
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate Desktop Commander device secret
+        env:
+          DESKTOP_COMMANDER_DEVICE_B64: ${{ secrets.DESKTOP_COMMANDER_DEVICE_B64 }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$DESKTOP_COMMANDER_DEVICE_B64" ]]; then
+            echo "::error::Add repository secret DESKTOP_COMMANDER_DEVICE_B64 before starting this runner."
+            exit 1
+          fi
+
+      - name: Fetch Debian 12 user configurations
+        run: |
+          set -Eeuo pipefail
+          git clone --depth=1 --single-branch --branch main \
+            https://github.com/AmrUser-48/deb12dots.git "$RUNNER_TEMP/deb12dots"
+          echo "Debian user configuration revision: $(git -C "$RUNNER_TEMP/deb12dots" rev-parse HEAD)"
+
+      - name: Install build and interactive tools
+        env:
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          set -Eeuo pipefail
+
+          # SSH_PUBLIC_KEY remains optional; the built-in owner key is always installed below.
+          if [[ -z "$TAILSCALE_AUTHKEY" ]]; then
+            echo "::error::Repository secret TAILSCALE_AUTHKEY is required for Tailscale authentication."
+            exit 1
+          fi
+
+          mapfile -t VIM_PACKAGES < <(
+            dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 'vim*' 2>/dev/null |
+              awk '$1 == "ii" && $2 ~ /^vim([.-]|$)/ { print $2 }'
+          )
+          if (("${#VIM_PACKAGES[@]}")); then
+            sudo apt-get purge --yes "${VIM_PACKAGES[@]}"
+          fi
+
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            openssh-server mosh distcc \
+            git gh \
+            neovim lf fd-find ripgrep fzf tmux htop jq tree bat less bash-completion \
+            file unzip zip xdg-utils libfile-mimeinfo-perl \
+            build-essential bc bison flex \
+            libssl-dev libelf-dev libncurses-dev dwarves \
+            rsync cpio kmod fakeroot dpkg-dev quilt debhelper \
+            python3 python3-dev python3-ply python3-setuptools \
+            curl ca-certificates xz-utils zstd lz4 \
+            intel-microcode linux-firmware-intel-wireless iucode-tool
+
+          mapfile -t REMAINING_VIM_PACKAGES < <(
+            dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 'vim*' 2>/dev/null |
+              awk '$1 == "ii" && $2 ~ /^vim([.-]|$)/ { print $2 }'
+          )
+          if (("${#REMAINING_VIM_PACKAGES[@]}")); then
+            printf '::error::Vim packages remain installed: %s\n' "${REMAINING_VIM_PACKAGES[*]}"
+            exit 1
+          fi
+          command -v nvim
+          command -v lf
+          command -v fdfind
+          command -v git
+          command -v gh
+          command -v mosh-server
+
+          sudo mkdir -p /lib/firmware /lib/firmware/intel-ucode
+
+          # Ubuntu 24.04 stores this legacy blob compressed below
+          # /usr/lib/firmware/intel/iwlwifi/, not at the kernel's requested path.
+          WIFI_SOURCE="$(find -L /usr/lib/firmware -type f \
+            -name 'iwlwifi-3945-2.ucode*' -print -quit 2>/dev/null || true)"
+          WIFI_TARGET=/lib/firmware/iwlwifi-3945-2.ucode
+          if [[ -z "$WIFI_SOURCE" ]]; then
+            echo "::error::iwlwifi-3945-2 firmware is missing from linux-firmware-intel-wireless."
+            dpkg -L linux-firmware-intel-wireless 2>/dev/null | grep -F 'iwlwifi-3945-2' || true
+            exit 1
+          fi
+
+          if [[ "$WIFI_SOURCE" == *.zst ]]; then
+            zstd -q -t "$WIFI_SOURCE"
+            sudo zstd -q -d -f "$WIFI_SOURCE" -o "$WIFI_TARGET"
+          elif [[ "$(readlink -f "$WIFI_SOURCE")" != "$(readlink -m "$WIFI_TARGET")" ]]; then
+            sudo cp -- "$WIFI_SOURCE" "$WIFI_TARGET"
+          fi
+          sudo chmod 0644 "$WIFI_TARGET"
+          test -s "$WIFI_TARGET"
+          echo "Firmware source: $WIFI_SOURCE"
+          echo "Firmware target: $WIFI_TARGET"
+          stat -c 'Firmware size: %s bytes' "$WIFI_TARGET"
+          sha256sum "$WIFI_TARGET"
+
+          # intel-microcode already installs this exact file under /usr/lib;
+          # /lib is the same firmware tree on Ubuntu. Validate it in place.
+          MICROCODE=/lib/firmware/intel-ucode/06-0f-0d
+          test -s "$MICROCODE" || {
+            echo "::error::T7250 microcode 06-0f-0d is missing."
+            dpkg -L intel-microcode 2>/dev/null | grep -F '/06-0f-0d' || true
+            exit 1
+          }
+          iucode_tool -l "$MICROCODE" | tee "$RUNNER_TEMP/d630-microcode.txt"
+          grep -qiE '0x0*6fd' "$RUNNER_TEMP/d630-microcode.txt" || {
+            echo "::error::Microcode does not contain the T7250 CPUID signature 0x000006fd."
+            exit 1
+          }
+
+          DOTFILES="$RUNNER_TEMP/deb12dots"
+          for config in \
+            .bashrc .aaliases .inputrc \
+            .config/nvim/init.lua \
+            .config/lf/lfrc .config/lf/icons .config/lf/colors \
+            .config/bat/config \
+            bash-command-timer/bash_command_timer.sh; do
+            [[ -s "$DOTFILES/$config" ]] || {
+              echo "::error::Required user configuration is missing: $config"
+              exit 1
+            }
+          done
+
+          install -d -m 0700 "$HOME/.ssh"
+          install -d -m 0755 "$HOME/.local/bin" "$HOME/.config/d630-runner" \
+            "$HOME/.local/lib/bash-command-timer" "$HOME/.trash"
+          : > "$RUNNER_TEMP/authorized_keys"
+          if [[ -n "$SSH_PUBLIC_KEY" ]]; then
+            printf '%s\n' "$SSH_PUBLIC_KEY" >> "$RUNNER_TEMP/authorized_keys"
+          fi
+          cat >> "$RUNNER_TEMP/authorized_keys" <<'D630_DEFAULT_SSH_KEY'
+          ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDX0Iq6/I6uP98Yd23xSKOSJIsMLncttaqvWnYHB5yfhpr4TQij9TG4h9Dwm27txqBEfhwQiM3LCjqcU2eKD5EWn2Bn+QB0dvu6aTN0oSeN0v7h0bXM+FSfKgT04YyjLbB8jqzv8CzQdW/A3hKWm19qIRuYBO5uowpLy1n+HzmWa3SHNQN+NeIMGRXou7xL+o9T2Q49f8IeqV1/8iCyLlJKjDrB+OalKY3CZiO5J0BwW5PZ6LG/jt66BiRYNpaKDSKkJm3DTqtiKtd78fGWOjjGbEUsjmKYllcSo3EziKj0XUTnSoiMxS3R63h2V0nxk8k6j4SF64vBgvujlhiFcfKQvBqw1cUNvzR9bPiNfVoC0gjvTmFPdnBJdGePS7I8mowxwnhj1gzl+aayXT6VHPkePQ/Yt6zUIucUyY6/WsGQsOj4F4ypYzZn+TXRVuEDs0G3f2I1h5yVGUm+R6wwwyIadTSpVgbXPhFbIHxk27qvY5ybLBv41hjepfIDXURRARE= jeroen@dell
+          D630_DEFAULT_SSH_KEY
+          awk 'NF && !seen[$0]++' "$RUNNER_TEMP/authorized_keys" > "$RUNNER_TEMP/authorized_keys.dedup"
+          ssh-keygen -lf "$RUNNER_TEMP/authorized_keys.dedup" >/dev/null
+          install -m 0600 "$RUNNER_TEMP/authorized_keys.dedup" "$HOME/.ssh/authorized_keys"
+          chown -R "$(id -un):$(id -gn)" "$HOME/.ssh"
+
+          # Deploy the Debian 12 shell, lf, bat, and complete vendored Neovim config.
+          cp "$DOTFILES/.bashrc" "$HOME/.bashrc"
+          cp "$DOTFILES/.aaliases" "$HOME/.aaliases"
+          cp "$DOTFILES/.inputrc" "$HOME/.inputrc"
+          cp -a "$DOTFILES/.config/nvim" "$HOME/.config/"
+          cp -a "$DOTFILES/.config/lf" "$HOME/.config/"
+          cp -a "$DOTFILES/.config/bat" "$HOME/.config/"
+          cp "$DOTFILES/bash-command-timer/bash_command_timer.sh" \
+            "$HOME/.local/lib/bash-command-timer/bash_command_timer.sh"
+
+          # Correct two typos in the runner copy without changing deb12dots.
+          sed -i \
+            -e '/^set prewiew!$/d' \
+            -e 's|\$HOME\.config/lf/lfrc|$HOME/.config/lf/lfrc|' \
+            "$HOME/.config/lf/lfrc"
+
+          ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
+          ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
+
+          printf 'export D630_WORKSPACE=%q\n' "$GITHUB_WORKSPACE" \
+            > "$HOME/.config/d630-runner/env"
+          cat >> "$HOME/.config/d630-runner/env" <<'EOF'
+          export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+          export PATH="$HOME/.local/bin:$PATH"
+          export OPENER="${OPENER:-xdg-open}"
+          export ARCH=x86_64
+          export KCFLAGS="${KCFLAGS:--march=core2 -mtune=core2}"
+          export BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
+          export MAKEFLAGS="${MAKEFLAGS:--j$BUILD_JOBS}"
+          [[ -r "$HOME/.config/lf/icons" ]] && source "$HOME/.config/lf/icons"
+          . /usr/share/bash-completion/bash_completion
+          EOF
+          chmod 0600 "$HOME/.config/d630-runner/env"
+
+          cat >> "$HOME/.bashrc" <<'EOF'
+
+          # D630 hosted-runner environment.
+          [[ -r "$HOME/.config/d630-runner/env" ]] && source "$HOME/.config/d630-runner/env"
+          EOF
+
+          bash -n "$HOME/.bashrc"
+          bash -n "$HOME/.aaliases"
+          bash -n "$HOME/.local/lib/bash-command-timer/bash_command_timer.sh"
+          nvim --headless -u "$HOME/.config/nvim/init.lua" +qa
+
+      - name: Configure GitHub CLI and Git with repository administration token
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$GH_PAT" ]]; then
+            echo "::error::Repository secret GH_PAT is required. Create a fine-grained PAT with access to the repositories the runner must manage."
+            exit 1
+          fi
+
+          # Keep the token readable only by the runner account.
+          install -d -m 0700 "$HOME/.config/d630-runner"
+          umask 077
+          printf '%s' "$GH_PAT" > "$HOME/.config/d630-runner/gh-token"
+          chmod 0600 "$HOME/.config/d630-runner/gh-token"
+
+          # Fine-grained PATs are supplied to gh through GH_TOKEN.
+          export GH_TOKEN="$GH_PAT"
+          gh auth setup-git --hostname github.com
+          git config --global init.defaultBranch main
+          git config --global fetch.prune true
+          git config --global pull.ff only
+          git config --global core.pager 'less -FRX'
+          git config --global user.name "$GITHUB_ACTOR"
+          git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+
+          # Make gh and Git use this token in later SSH login shells.
+          cat >> "$HOME/.bashrc" <<'EOF'
+          if [[ -r "$HOME/.config/d630-runner/gh-token" ]]; then
+            export GH_TOKEN="$(<"$HOME/.config/d630-runner/gh-token")"
+          fi
+          EOF
+
+          gh auth status
+          git --version
+          gh --version
+
+      - name: Join Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          hostname: d630-distcc-master-${{ github.run_id }}
+          use-cache: "true"
+
+      - name: Set up Node.js for Desktop Commander Remote
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install and start Desktop Commander Remote MCP
+        env:
+          DESKTOP_COMMANDER_DEVICE_B64: ${{ secrets.DESKTOP_COMMANDER_DEVICE_B64 }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "$DESKTOP_COMMANDER_DEVICE_B64" ]]; then
+            echo "::error::Repository secret DESKTOP_COMMANDER_DEVICE_B64 is required."
+            exit 1
+          fi
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::Repository secret GH_PAT is required."
+            exit 1
+          fi
+
+          node --version
+          npm --version
+          node -e '
+            const [major, minor] = process.versions.node.split(".").map(Number);
+            if (major < 22 || (major === 22 && minor < 12)) {
+              console.error("Desktop Commander Remote requires Node.js 22.12 or newer.");
+              process.exit(1);
+            }
+          '
+
+          # Restore only the device session and MQTT credentials; never restore local logs.
+          printf '%s' "$DESKTOP_COMMANDER_DEVICE_B64" |
+            base64 --decode |
+            tar -xz -C "$HOME"
+
+          DC_DIR="$HOME/.desktop-commander-device"
+          test -s "$DC_DIR/device.json"
+          test -s "$DC_DIR/.mqtt/identity.json"
+          test -s "$DC_DIR/.mqtt/certificate.json"
+          chmod 0700 "$DC_DIR" "$DC_DIR/.mqtt"
+          chmod 0600 "$DC_DIR/device.json" "$DC_DIR/.mqtt/identity.json" "$DC_DIR/.mqtt/certificate.json"
+
+          # Install the current published Remote Device package for this runner session.
+          npm install --global --prefix "$HOME/.local" @wonderwhy-er/desktop-commander@latest
+          test -x "$HOME/.local/bin/desktop-commander"
+
+          # Keep the Remote Device connected for the lifetime of this interactive runner.
+          nohup "$HOME/.local/bin/desktop-commander" remote \
+            >>"$RUNNER_TEMP/desktop-commander-remote.log" 2>&1 </dev/null &
+          REMOTE_PID=$!
+          printf '%s\n' "$REMOTE_PID" > "$RUNNER_TEMP/desktop-commander-remote.pid"
+          sleep 3
+          if ! kill -0 "$REMOTE_PID" 2>/dev/null; then
+            echo "::error::Desktop Commander Remote exited during startup; inspect the runner's remote log."
+            exit 1
+          fi
+          echo "Desktop Commander Remote started (PID $REMOTE_PID)."
+          echo "Device credentials restored from DESKTOP_COMMANDER_DEVICE_B64."
+
+      - name: Install workspace snapshots and shutdown upload
+        run: |
+          set -Eeuo pipefail
+
+          cat > "$RUNNER_TEMP/d630-runner-snapshot.env" <<EOF
+          D630_WORKSPACE=$GITHUB_WORKSPACE
+          D630_REPOSITORY=$GITHUB_REPOSITORY
+          D630_RUN_ID=$GITHUB_RUN_ID
+          D630_SHA=$GITHUB_SHA
+          D630_TAG=d630-runner-$GITHUB_RUN_ID
+          D630_TMPDIR=$RUNNER_TEMP
+          EOF
+          sudo install -m 0600 -o runner -g runner "$RUNNER_TEMP/d630-runner-snapshot.env" /etc/default/d630-runner-snapshot
+
+          sudo tee /usr/local/sbin/d630-save-workspace >/dev/null <<'D630_SNAPSHOT_SCRIPT'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          export HOME=/home/runner
+          source /etc/default/d630-runner-snapshot
+          TOKEN_FILE="$HOME/.config/d630-runner/gh-token"
+          [[ -s "$TOKEN_FILE" ]] || { echo "Missing GitHub release token: $TOKEN_FILE" >&2; exit 1; }
+          export GH_TOKEN="$(<"$TOKEN_FILE")"
+
+          mkdir -p "$D630_TMPDIR"
+          STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+          ARCHIVE="$D630_TMPDIR/d630-workspace-$STAMP-${BASHPID}.tar.zst"
+          echo "Snapshotting workspace: $D630_WORKSPACE"
+          tar --zstd -cf "$ARCHIVE" \
+            --exclude='./.git' --exclude='./.git/**' --exclude='*/.git' --exclude='*/.git/**' \
+            --exclude='./.ssh' --exclude='./.ssh/**' --exclude='*/.ssh' --exclude='*/.ssh/**' \
+            --exclude='./.env' --exclude='./.env.*' --exclude='*/.env' --exclude='*/.env.*' \
+            --exclude='*.pem' --exclude='*.p12' \
+            -C "$D630_WORKSPACE" .
+          ls -lh "$ARCHIVE"
+
+          if ! gh release view "$D630_TAG" --repo "$D630_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$D630_TAG" --repo "$D630_REPOSITORY" \
+              --title "D630 interactive runner #$D630_RUN_ID snapshots" \
+              --notes "Automatic workspace snapshots. Extract over a fresh checkout of the same repository." \
+              --prerelease --target "$D630_SHA"
+          fi
+          gh release upload "$D630_TAG" "$ARCHIVE" --repo "$D630_REPOSITORY"
+          rm -f "$ARCHIVE"
+          echo "Workspace snapshot uploaded to release $D630_TAG."
+          D630_SNAPSHOT_SCRIPT
+          sudo chmod 0755 /usr/local/sbin/d630-save-workspace
+
+          sudo tee /etc/systemd/system/d630-runner-shutdown-snapshot.service >/dev/null <<'D630_SHUTDOWN_UNIT'
+          [Unit]
+          Description=Upload D630 workspace before graceful shutdown
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          User=runner
+          Environment=HOME=/home/runner
+          EnvironmentFile=/etc/default/d630-runner-snapshot
+          ExecStart=/bin/true
+          ExecStop=/usr/local/sbin/d630-save-workspace
+          RemainAfterExit=yes
+          TimeoutStopSec=240
+
+          [Install]
+          WantedBy=multi-user.target
+          D630_SHUTDOWN_UNIT
+
+          sudo tee /etc/systemd/system/d630-runner-checkpoint.service >/dev/null <<'D630_CHECKPOINT_UNIT'
+          [Unit]
+          Description=Upload periodic D630 workspace checkpoint
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          User=runner
+          Environment=HOME=/home/runner
+          EnvironmentFile=/etc/default/d630-runner-snapshot
+          ExecStart=/usr/local/sbin/d630-save-workspace
+          TimeoutStartSec=240
+          D630_CHECKPOINT_UNIT
+
+          sudo tee /etc/systemd/system/d630-runner-checkpoint.timer >/dev/null <<'D630_CHECKPOINT_TIMER'
+          [Unit]
+          Description=Periodic D630 workspace checkpoint
+
+          [Timer]
+          OnBootSec=15min
+          OnUnitActiveSec=30min
+          AccuracySec=1min
+          Unit=d630-runner-checkpoint.service
+
+          [Install]
+          WantedBy=timers.target
+          D630_CHECKPOINT_TIMER
+
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now d630-runner-shutdown-snapshot.service
+          sudo systemctl enable --now d630-runner-checkpoint.timer
+          echo "Graceful-shutdown snapshot hook enabled."
+          echo "Automatic GitHub Release checkpoints: first at 15 minutes, then every 30 minutes."
+          echo "Manual snapshot command: sudo -u runner /usr/local/sbin/d630-save-workspace"
+
+      - name: Start SSH on the Tailscale interface (distcc master)
+        run: |
+          set -Eeuo pipefail
+
+          sudo tailscale set --hostname="d630-distcc-master-${GITHUB_RUN_ID}"
+          TAILSCALE_IP="$(tailscale ip -4)"
+          [[ "$TAILSCALE_IP" =~ ^100\. ]] || {
+            echo "::error::Tailscale did not return a 100.x IPv4 address."
+            exit 1
+          }
+
+          sudo install -d -m 0755 /etc/ssh/sshd_config.d /run/sshd
+          sudo tee /etc/ssh/sshd_config.d/60-d630-interactive.conf >/dev/null <<EOF
+          Port 22
+          ListenAddress $TAILSCALE_IP
+          PubkeyAuthentication yes
+          AuthenticationMethods publickey
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitRootLogin no
+          AllowUsers runner
+          PermitTTY yes
+          AllowTcpForwarding yes
+          X11Forwarding no
+          PermitTunnel no
+          Compression no
+          TCPKeepAlive yes
+          ClientAliveInterval 30
+          ClientAliveCountMax 6
+          MaxSessions 12
+          EOF
+
+          sudo ssh-keygen -A
+          sudo /usr/sbin/sshd -t
+
+          # The hosted image may already have an sshd process. Stop it first so
+          # the Tailscale-only listener can bind port 22 without a stale conflict.
+          sudo systemctl stop ssh.socket 2>/dev/null || true
+          sudo systemctl stop ssh.service 2>/dev/null || true
+          sudo pkill -x sshd 2>/dev/null || true
+          sleep 1
+          sudo rm -f /run/sshd.pid
+          if pgrep -x sshd >/dev/null; then
+            echo "::error::A previous sshd process is still running."
+            pgrep -a -x sshd || true
+            exit 1
+          fi
+
+          # Run sshd directly rather than relying on the hosted image's systemd
+          # service unit, which failed during enable/restart in the previous run.
+          if ! sudo /usr/sbin/sshd -e; then
+            echo "::error::sshd failed to start; diagnostics follow."
+            sudo /usr/sbin/sshd -T | grep -E '^(port|listenaddress|authorizedkeysfile|allowusers) '
+            sudo journalctl -u ssh.service -n 60 --no-pager || true
+            exit 1
+          fi
+
+          for attempt in {1..10}; do
+            if sudo ss -H -ltnp 'sport = :22' | grep -F "$TAILSCALE_IP:22"; then
+              break
+            fi
+            sleep 1
+          done
+          LISTENERS="$(sudo ss -H -ltnp 'sport = :22' || true)"
+          printf '%s\n' "$LISTENERS"
+          grep -Fq "$TAILSCALE_IP:22" <<<"$LISTENERS" || {
+            echo "::error::sshd did not bind to $TAILSCALE_IP:22."
+            sudo journalctl -u ssh.service -n 60 --no-pager || true
+            pgrep -a -x sshd || true
+            exit 1
+          }
+          timeout 3 bash -c ":</dev/tcp/$TAILSCALE_IP/22"
+
+          echo
+          echo "D630 INTERACTIVE RUNNER READY"
+          echo "Workspace: $GITHUB_WORKSPACE"
+          echo "Tailscale hostname: d630-distcc-master-$GITHUB_RUN_ID"
+          echo "Tailscale IPv4: $TAILSCALE_IP"
+          echo "SSH:  ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3 runner@$TAILSCALE_IP"
+          echo "Mosh: mosh --ssh='ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3' runner@$TAILSCALE_IP"
+          echo "SSH host key fingerprint:"
+          sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+          echo
+          echo "Build CPUs: $(nproc)"
+          echo "Memory:"
+          free -h
+          echo "Disk:"
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Start 18 distcc workers and configure the compiler pool
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set -Eeuo pipefail
+
+          command -v gh
+          command -v distcc
+          command -v gcc
+          gh auth status
+
+          MASTER_IP="$(tailscale ip -4)"
+          [[ "$MASTER_IP" =~ ^100\. ]] || {
+            echo "::error::Master did not receive a Tailscale IPv4 address."
+            exit 1
+          }
+          echo "Leader run: $GITHUB_RUN_ID"
+          echo "Master Tailscale IPv4: $MASTER_IP"
+          echo "Starting 18 independent worker workflow runs."
+
+          WORKER_WORKFLOW=d630-distcc-worker.yml
+          for slot in $(seq -w 1 18); do
+            echo "Dispatching distcc worker $slot/18..."
+            gh workflow run "$WORKER_WORKFLOW" \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref main \
+              -f "cluster_id=$GITHUB_RUN_ID" \
+              -f "master_ip=$MASTER_IP" \
+              -f "worker_slot=$slot"
+          done
+
+          WORKER_PREFIX="d630-distcc-$GITHUB_RUN_ID-w"
+          WORKER_IPS=()
+          echo "Waiting up to 15 minutes for all 18 Tailscale workers..."
+          for attempt in {1..90}; do
+            mapfile -t WORKER_IPS < <(
+              tailscale status --json |
+                jq -r --arg prefix "$WORKER_PREFIX" '
+                  [
+                    .Peer[]?
+                    | select((.HostName // "") | startswith($prefix))
+                    | select(.Online == true)
+                    | (.TailscaleIPs[0] // empty)
+                    | select(startswith("100."))
+                  ]
+                  | unique
+                  | .[]'
+            )
+            printf 'Online workers: %s/18\n' "${#WORKER_IPS[@]}"
+            if (( ${#WORKER_IPS[@]} == 18 )); then
+              break
+            fi
+            sleep 10
+          done
+
+          if (( ${#WORKER_IPS[@]} != 18 )); then
+            echo "::error::Only ${#WORKER_IPS[@]}/18 workers joined the tailnet."
+            tailscale status || true
+            exit 1
+          fi
+
+          echo "All workers joined. Verifying real remote compiler execution on every worker."
+          mkdir -p "$RUNNER_TEMP/distcc-probe"
+          printf 'int d630_distcc_probe(void) { return 76; }\n' \
+            > "$RUNNER_TEMP/distcc-probe/probe.c"
+
+          for index in "${!WORKER_IPS[@]}"; do
+            worker_ip="${WORKER_IPS[$index]}"
+            object="$RUNNER_TEMP/distcc-probe/worker-$((index + 1)).o"
+            echo "Testing worker $((index + 1))/18 at $worker_ip..."
+            worker_ok=0
+            for attempt in {1..12}; do
+              if timeout 45s env \
+                DISTCC_FALLBACK=0 \
+                DISTCC_HOSTS="$worker_ip/4" \
+                DISTCC_VERBOSE=1 \
+                distcc gcc -c "$RUNNER_TEMP/distcc-probe/probe.c" -o "$object"; then
+                worker_ok=1
+                break
+              fi
+              sleep 5
+            done
+            if (( worker_ok != 1 )); then
+              echo "::error::Remote compile probe failed on worker $worker_ip."
+              exit 1
+            fi
+            echo "Worker $worker_ip passed a remote-only compile probe."
+          done
+
+          DISTCC_HOSTS_VALUE="localhost/4"
+          for worker_ip in "${WORKER_IPS[@]}"; do
+            DISTCC_HOSTS_VALUE+=" $worker_ip/4"
+          done
+
+          install -d -m 0755 "$HOME/.config/d630-distcc" "$HOME/.cache/distcc"
+          printf '%s\n' "${WORKER_IPS[@]}" > "$HOME/.config/d630-distcc/workers"
+          {
+            printf 'export DISTCC_HOSTS=%q\n' "$DISTCC_HOSTS_VALUE"
+            printf 'export DISTCC_DIR=%q\n' "$HOME/.cache/distcc"
+            printf 'export CC=%q\n' 'distcc gcc'
+            printf 'export CXX=%q\n' 'distcc g++'
+            printf 'export BUILD_JOBS=76\n'
+            printf 'export MAKEFLAGS=-j76\n'
+          } > "$HOME/.config/d630-distcc/env"
+          chmod 0644 "$HOME/.config/d630-distcc/env"
+
+          if ! grep -Fq 'd630-distcc/env' "$HOME/.bashrc"; then
+            cat >> "$HOME/.bashrc" <<'D630_DISTCC_BASHRC'
+          [[ -r "$HOME/.config/d630-distcc/env" ]] && source "$HOME/.config/d630-distcc/env"
+          D630_DISTCC_BASHRC
+          fi
+
+          source "$HOME/.config/d630-distcc/env"
+          echo
+          echo "D630 DISTCC CLUSTER READY"
+          echo "Allocated: 19 runners x 4 vCPU = 76 vCPU; 19 x 16 GB = 304 GB RAM."
+          echo "distcc hosts:"
+          distcc --show-hosts
+          echo
+          echo "Interactive shell defaults: CC='$CC' CXX='$CXX' MAKEFLAGS='$MAKEFLAGS'"
+          echo "Use distccmon-text 1 to watch active remote compilation."
+          echo "Worker addresses saved to ~/.config/d630-distcc/workers"
+
+      - name: Keep interactive distcc master available
+        timeout-minutes: 335
+        run: |
+          set -Eeuo pipefail
+          echo "Master and its 18 distcc workers remain available until cancellation or timeout."
+          sleep 19800
+
+      - name: Stop distcc worker workflows
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set +e
+          WORKER_WORKFLOW=d630-distcc-worker.yml
+          mapfile -t WORKER_RUN_IDS < <(
+            gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow "$WORKER_WORKFLOW" \
+              --limit 100 \
+              --json databaseId,displayTitle \
+              --jq ".[] | select(.displayTitle | contains(\"D630 distcc cluster $GITHUB_RUN_ID worker\")) | .databaseId"
+          )
+          echo "Stopping ${#WORKER_RUN_IDS[@]} worker workflows for leader $GITHUB_RUN_ID."
+          for worker_run_id in "${WORKER_RUN_IDS[@]}"; do
+            gh run cancel "$worker_run_id" --repo "$GITHUB_REPOSITORY" || true
+          done
+
+      - name: Upload final workspace artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d630-runner-workspace-${{ github.run_id }}
+          path: |
+            ${{ github.workspace }}/
+            !${{ github.workspace }}/.git/**
+            !${{ github.workspace }}/**/.git/**
+            !${{ github.workspace }}/.ssh/**
+            !${{ github.workspace }}/**/.ssh/**
+            !${{ github.workspace }}/.env
+            !${{ github.workspace }}/.env.*
+            !${{ github.workspace }}/**/.env
+            !${{ github.workspace }}/**/.env.*
+            !${{ github.workspace }}/**/*.pem
+            !${{ github.workspace }}/**/*.p12
+          include-hidden-files: true
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: warn
