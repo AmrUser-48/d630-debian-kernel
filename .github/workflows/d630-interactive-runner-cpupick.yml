@@ -485,7 +485,7 @@ jobs:
             exit 1
           }
 
-          sudo install -d -m 0755 /etc/ssh/sshd_config.d /run/sshd
+          sudo install -d -m 0755 /etc/ssh/sshd_config.d
           sudo tee /etc/ssh/sshd_config.d/60-d630-interactive.conf >/dev/null <<EOF
           Port 22
           ListenAddress $TAILSCALE_IP
@@ -507,10 +507,8 @@ jobs:
           EOF
 
           sudo ssh-keygen -A
-          sudo /usr/sbin/sshd -t
 
-          # The hosted image may already have an sshd process. Stop it first so
-          # the Tailscale-only listener can bind port 22 without a stale conflict.
+          # Stop the hosted SSH listeners before starting the Tailscale-only listener.
           sudo systemctl stop ssh.socket 2>/dev/null || true
           sudo systemctl stop ssh.service 2>/dev/null || true
           sudo pkill -x sshd 2>/dev/null || true
@@ -521,6 +519,11 @@ jobs:
             pgrep -a -x sshd || true
             exit 1
           fi
+
+          # ssh.service owns /run/sshd as a RuntimeDirectory and removes it on stop.
+          # Recreate it only after stopping the service, then validate sshd config.
+          sudo install -d -o root -g root -m 0755 /run/sshd
+          sudo /usr/sbin/sshd -t
 
           # Run sshd directly rather than relying on the hosted image's systemd
           # service unit, which failed during enable/restart in the previous run.
