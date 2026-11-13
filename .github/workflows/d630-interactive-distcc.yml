@@ -631,6 +631,7 @@ jobs:
             printf 'export DISTCC_DIR=%q\n' "$HOME/.cache/distcc"
             printf 'export CC=%q\n' 'distcc gcc'
             printf 'export CXX=%q\n' 'distcc g++'
+            printf 'export CFLAGS=%q\n' '-O2 -pipe -march=core2 -mtune=core2'
             printf 'export BUILD_JOBS=76\n'
             printf 'export MAKEFLAGS=-j76\n'
           } > "$HOME/.config/d630-distcc/env"
