@@ -11,7 +11,6 @@ on:
         type: choice
         options:
           - "17"
-          - "18"
       lead_attempt:
         description: "Automatic AMD 3 CPU-match restart counter (0–9; do not change manually)"
         required: false
@@ -576,8 +575,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           set -Eeuo pipefail
-          [[ "$WORKER_COUNT" == "17" || "$WORKER_COUNT" == "18" ]] || {
-            echo "::error::Worker count must be 17 or 18."
+          [[ "$WORKER_COUNT" == "17" ]] || {
+            echo "::error::Exactly 17 worker candidates are required."
             exit 1
           }
           command -v gh
@@ -691,7 +690,7 @@ jobs:
           for index in "${!WORKER_IPS[@]}"; do
             worker_ip="${WORKER_IPS[$index]}"
             object="$RUNNER_TEMP/distcc-probe/worker-$((index + 1)).o"
-            echo "Testing worker $((index + 1))/$WORKER_COUNT at $worker_ip..."
+            echo "Testing selected worker $((index + 1))/$REQUIRED_WORKERS at $worker_ip..."
             worker_ok=0
             for attempt in {1..12}; do
               if timeout 45s env \
