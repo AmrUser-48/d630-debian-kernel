@@ -736,7 +736,7 @@ jobs:
           REQUIRED_WORKERS=${#WORKER_IPS[@]}
           echo "Using $REQUIRED_WORKERS verified AMD 3 workers."
 
-          # Keep the four selected workers; stop unused candidates and their retry runs.
+          # Keep the selected quorum (2–4 workers); stop unused candidates and retry runs.
           KEEP_WORKER_SLOTS=" ${WORKER_SLOTS[*]} "
           mapfile -t ACTIVE_WORKER_RUNS < <(
             gh run list --repo "$GITHUB_REPOSITORY" \
@@ -824,7 +824,7 @@ jobs:
         timeout-minutes: 335
         run: |
           set -Eeuo pipefail
-          echo "Master and its 4 selected AMD 3 distcc workers remain available until cancellation or timeout."
+          echo "Master and its $REQUIRED_WORKERS verified AMD 3 distcc workers remain available until cancellation or timeout."
           sleep 19800
 
       - name: Stop distcc worker workflows
