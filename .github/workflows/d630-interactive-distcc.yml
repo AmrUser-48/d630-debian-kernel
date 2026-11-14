@@ -666,19 +666,17 @@ jobs:
               "${#ONLINE_WORKERS[@]}" "$WORKER_COUNT" \
               "${#READY_WORKER_IPS[@]}" "$MIN_WORKERS" "$MAX_WORKERS"
 
-            if (( ${#READY_WORKER_IPS[@]} >= MAX_WORKERS )); then
-              WORKER_IPS=("${READY_WORKER_IPS[@]:0:MAX_WORKERS}")
-              WORKER_SLOTS=("${READY_WORKER_SLOTS[@]:0:MAX_WORKERS}")
+            if (( ${#READY_WORKER_IPS[@]} >= MIN_WORKERS )); then
+              SELECT_COUNT=${#READY_WORKER_IPS[@]}
+              (( SELECT_COUNT > MAX_WORKERS )) && SELECT_COUNT=$MAX_WORKERS
+              WORKER_IPS=("${READY_WORKER_IPS[@]:0:SELECT_COUNT}")
+              WORKER_SLOTS=("${READY_WORKER_SLOTS[@]:0:SELECT_COUNT}")
+              echo "Minimum quorum reached. Proceeding immediately with $SELECT_COUNT ready worker(s)."
               break
             fi
 
             if (( attempt == 90 )); then
-              if (( ${#READY_WORKER_IPS[@]} >= MIN_WORKERS )); then
-                WORKER_IPS=("${READY_WORKER_IPS[@]}")
-                WORKER_SLOTS=("${READY_WORKER_SLOTS[@]}")
-                break
-              fi
-              echo "::error::Only ${#READY_WORKER_IPS[@]}/$MIN_WORKERS required AMD 3 workers became ready from $WORKER_COUNT candidates within 15 minutes."
+              echo "::error::Only ${#READY_WORKER_IPS[@]}/$MIN_WORKERS required AMD 3 workers became ready within the 15-minute discovery limit."
               tailscale status || true
               exit 1
             fi
