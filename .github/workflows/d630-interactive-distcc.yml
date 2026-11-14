@@ -734,6 +734,7 @@ jobs:
           WORKER_IPS=("${PROBED_WORKER_IPS[@]}")
           WORKER_SLOTS=("${PROBED_WORKER_SLOTS[@]}")
           REQUIRED_WORKERS=${#WORKER_IPS[@]}
+          echo "REQUIRED_WORKERS=$REQUIRED_WORKERS" >> "$GITHUB_ENV"
           echo "Using $REQUIRED_WORKERS verified AMD 80 workers."
 
           # Keep the selected quorum (2–4 workers); stop unused candidates and retry runs.
