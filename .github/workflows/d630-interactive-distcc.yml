@@ -1,5 +1,5 @@
 name: D630 Interactive distcc
-run-name: "D630 interactive distcc / ${{ github.ref_name }} / AMD 3 attempt ${{ inputs.lead_attempt }} / #${{ github.run_number }}"
+run-name: "D630 interactive distcc / ${{ github.ref_name }} / AMD 80 attempt ${{ inputs.lead_attempt }} / #${{ github.run_number }}"
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
         options:
           - "17"
       lead_attempt:
-        description: "Automatic AMD 3 CPU-match restart counter (0–9; do not change manually)"
+        description: "Automatic AMD 80 CPU-match restart counter (0–9; do not change manually)"
         required: false
         default: "0"
         type: string
@@ -35,28 +35,28 @@ jobs:
         shell: bash
 
     steps:
-      - name: Match AMD 3 lead runner (maximum 9 restarts)
+      - name: Match AMD 80 lead runner (maximum 9 restarts)
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
           WORKER_COUNT: ${{ inputs.worker_count }}
           LEAD_ATTEMPT: ${{ inputs.lead_attempt }}
         run: |
           set -Eeuo pipefail
-          EXPECTED_CPU='AMD EPYC 7763 64-Core Processor'
+          EXPECTED_CPU='AMD EPYC 9V74 80-Core Processor'
           [[ "$LEAD_ATTEMPT" =~ ^[0-9]+$ ]] && (( LEAD_ATTEMPT <= 9 )) || {
             echo "::error::Lead attempt must be an integer between 0 and 9."
             exit 1
           }
           CPU_MODEL="$(awk -F': ' '/^model name[[:space:]]*:/ { print $2; exit }' /proc/cpuinfo)"
           echo "Detected lead CPU model: ${CPU_MODEL:-unknown}"
-          echo "Required AMD 3 CPU model: $EXPECTED_CPU"
+          echo "Required AMD 80 CPU model: $EXPECTED_CPU"
           echo "Lead restart count: $LEAD_ATTEMPT/9"
           if [[ "$CPU_MODEL" == "$EXPECTED_CPU" ]]; then
-            echo "AMD 3 lead CPU match accepted. Continuing runner setup."
+            echo "AMD 80 lead CPU match accepted. Continuing runner setup."
             exit 0
           fi
           if (( LEAD_ATTEMPT >= 9 )); then
-            echo "::error::Lead runner did not match AMD 3 after 9 restarts."
+            echo "::error::Lead runner did not match AMD 80 after 9 restarts."
             exit 1
           fi
           if [[ -z "$GH_PAT" ]]; then
@@ -612,7 +612,7 @@ jobs:
           mkdir -p "$TCP_READY_DIR"
           WORKER_IPS=()
           WORKER_SLOTS=()
-          echo "Searching $WORKER_COUNT AMD 3 candidates: minimum $MIN_WORKERS workers, maximum $MAX_WORKERS."
+          echo "Searching $WORKER_COUNT AMD 80 candidates: minimum $MIN_WORKERS workers, maximum $MAX_WORKERS."
           echo "Will use 4 when available; 2 or 3 are sufficient."
 
           for attempt in {1..90}; do
@@ -662,7 +662,7 @@ jobs:
               fi
             done
 
-            printf 'Online AMD 3 candidates: %s/%s; distccd-ready: %s (minimum %s, cap %s)\n' \
+            printf 'Online AMD 80 candidates: %s/%s; distccd-ready: %s (minimum %s, cap %s)\n' \
               "${#ONLINE_WORKERS[@]}" "$WORKER_COUNT" \
               "${#READY_WORKER_IPS[@]}" "$MIN_WORKERS" "$MAX_WORKERS"
 
@@ -676,7 +676,7 @@ jobs:
             fi
 
             if (( attempt == 90 )); then
-              echo "::error::Only ${#READY_WORKER_IPS[@]}/$MIN_WORKERS required AMD 3 workers became ready within the 15-minute discovery limit."
+              echo "::error::Only ${#READY_WORKER_IPS[@]}/$MIN_WORKERS required AMD 80 workers became ready within the 15-minute discovery limit."
               tailscale status || true
               exit 1
             fi
@@ -684,13 +684,13 @@ jobs:
           done
 
           if (( ${#WORKER_IPS[@]} < MIN_WORKERS )); then
-            echo "::error::Fewer than $MIN_WORKERS AMD 3 workers are available."
+            echo "::error::Fewer than $MIN_WORKERS AMD 80 workers are available."
             tailscale status || true
             exit 1
           fi
           REQUIRED_WORKERS=${#WORKER_IPS[@]}
 
-          echo "Selected $REQUIRED_WORKERS AMD 3 workers with active distccd listeners:"
+          echo "Selected $REQUIRED_WORKERS AMD 80 workers with active distccd listeners:"
           for index in "${!WORKER_IPS[@]}"; do
             printf '  slot %s: %s\n' "${WORKER_SLOTS[$index]}" "${WORKER_IPS[$index]}"
           done
@@ -705,7 +705,7 @@ jobs:
             worker_ip="${WORKER_IPS[$index]}"
             worker_slot="${WORKER_SLOTS[$index]}"
             object="$RUNNER_TEMP/distcc-probe/worker-$worker_slot.o"
-            echo "Testing AMD 3 worker slot $worker_slot at $worker_ip..."
+            echo "Testing AMD 80 worker slot $worker_slot at $worker_ip..."
             worker_ok=0
             for attempt in {1..12}; do
               if timeout 45s env \
@@ -734,7 +734,7 @@ jobs:
           WORKER_IPS=("${PROBED_WORKER_IPS[@]}")
           WORKER_SLOTS=("${PROBED_WORKER_SLOTS[@]}")
           REQUIRED_WORKERS=${#WORKER_IPS[@]}
-          echo "Using $REQUIRED_WORKERS verified AMD 3 workers."
+          echo "Using $REQUIRED_WORKERS verified AMD 80 workers."
 
           # Keep the selected quorum (2–4 workers); stop unused candidates and retry runs.
           KEEP_WORKER_SLOTS=" ${WORKER_SLOTS[*]} "
@@ -824,7 +824,7 @@ jobs:
         timeout-minutes: 335
         run: |
           set -Eeuo pipefail
-          echo "Master and its $REQUIRED_WORKERS verified AMD 3 distcc workers remain available until cancellation or timeout."
+          echo "Master and its $REQUIRED_WORKERS verified AMD 80 distcc workers remain available until cancellation or timeout."
           sleep 19800
 
       - name: Stop distcc worker workflows
