@@ -606,12 +606,14 @@ jobs:
           done
 
           WORKER_PREFIX="d630-distcc-$GITHUB_RUN_ID-w"
-          REQUIRED_WORKERS=4
+          MIN_WORKERS=2
+          MAX_WORKERS=4
           TCP_READY_DIR="$RUNNER_TEMP/distcc-tcp-ready"
           mkdir -p "$TCP_READY_DIR"
           WORKER_IPS=()
           WORKER_SLOTS=()
-          echo "Waiting up to 15 minutes for $REQUIRED_WORKERS AMD 3 workers out of $WORKER_COUNT candidates..."
+          echo "Searching $WORKER_COUNT AMD 3 candidates: minimum $MIN_WORKERS workers, maximum $MAX_WORKERS."
+          echo "Will use 4 when available; 2 or 3 are sufficient."
 
           for attempt in {1..90}; do
             mapfile -t ONLINE_WORKERS < <(
@@ -660,37 +662,52 @@ jobs:
               fi
             done
 
-            printf 'Online AMD 3 candidates: %s/%s; distccd-ready: %s/%s\n' \
+            printf 'Online AMD 3 candidates: %s/%s; distccd-ready: %s (minimum %s, cap %s)\n' \
               "${#ONLINE_WORKERS[@]}" "$WORKER_COUNT" \
-              "${#READY_WORKER_IPS[@]}" "$REQUIRED_WORKERS"
-            if (( ${#READY_WORKER_IPS[@]} >= REQUIRED_WORKERS )); then
-              WORKER_IPS=("${READY_WORKER_IPS[@]:0:REQUIRED_WORKERS}")
-              WORKER_SLOTS=("${READY_WORKER_SLOTS[@]:0:REQUIRED_WORKERS}")
+              "${#READY_WORKER_IPS[@]}" "$MIN_WORKERS" "$MAX_WORKERS"
+
+            if (( ${#READY_WORKER_IPS[@]} >= MAX_WORKERS )); then
+              WORKER_IPS=("${READY_WORKER_IPS[@]:0:MAX_WORKERS}")
+              WORKER_SLOTS=("${READY_WORKER_SLOTS[@]:0:MAX_WORKERS}")
               break
+            fi
+
+            if (( attempt == 90 )); then
+              if (( ${#READY_WORKER_IPS[@]} >= MIN_WORKERS )); then
+                WORKER_IPS=("${READY_WORKER_IPS[@]}")
+                WORKER_SLOTS=("${READY_WORKER_SLOTS[@]}")
+                break
+              fi
+              echo "::error::Only ${#READY_WORKER_IPS[@]}/$MIN_WORKERS required AMD 3 workers became ready from $WORKER_COUNT candidates within 15 minutes."
+              tailscale status || true
+              exit 1
             fi
             sleep 10
           done
 
-          if (( ${#WORKER_IPS[@]} < REQUIRED_WORKERS )); then
-            echo "::error::Only ${#WORKER_IPS[@]}/$REQUIRED_WORKERS AMD 3 workers became ready from $WORKER_COUNT candidates within 15 minutes."
+          if (( ${#WORKER_IPS[@]} < MIN_WORKERS )); then
+            echo "::error::Fewer than $MIN_WORKERS AMD 3 workers are available."
             tailscale status || true
             exit 1
           fi
+          REQUIRED_WORKERS=${#WORKER_IPS[@]}
 
           echo "Selected $REQUIRED_WORKERS AMD 3 workers with active distccd listeners:"
           for index in "${!WORKER_IPS[@]}"; do
             printf '  slot %s: %s\n' "${WORKER_SLOTS[$index]}" "${WORKER_IPS[$index]}"
           done
 
-          echo "TCP readiness confirmed. Verifying real remote compiler execution on every selected worker."
           mkdir -p "$RUNNER_TEMP/distcc-probe"
           printf 'int d630_distcc_probe(void) { return 76; }\n' \
             > "$RUNNER_TEMP/distcc-probe/probe.c"
 
+          PROBED_WORKER_IPS=()
+          PROBED_WORKER_SLOTS=()
           for index in "${!WORKER_IPS[@]}"; do
             worker_ip="${WORKER_IPS[$index]}"
-            object="$RUNNER_TEMP/distcc-probe/worker-$((index + 1)).o"
-            echo "Testing selected worker $((index + 1))/$REQUIRED_WORKERS at $worker_ip..."
+            worker_slot="${WORKER_SLOTS[$index]}"
+            object="$RUNNER_TEMP/distcc-probe/worker-$worker_slot.o"
+            echo "Testing AMD 3 worker slot $worker_slot at $worker_ip..."
             worker_ok=0
             for attempt in {1..12}; do
               if timeout 45s env \
@@ -703,12 +720,23 @@ jobs:
               fi
               sleep 5
             done
-            if (( worker_ok != 1 )); then
-              echo "::error::Remote compile probe failed on worker $worker_ip."
-              exit 1
+            if (( worker_ok == 1 )); then
+              PROBED_WORKER_IPS+=("$worker_ip")
+              PROBED_WORKER_SLOTS+=("$worker_slot")
+              echo "Worker slot $worker_slot passed the remote-only compile probe."
+            else
+              echo "::warning::Worker slot $worker_slot failed the remote-only compile probe; excluding it."
             fi
-            echo "Worker $worker_ip passed a remote-only compile probe."
           done
+
+          if (( ${#PROBED_WORKER_IPS[@]} < MIN_WORKERS )); then
+            echo "::error::Only ${#PROBED_WORKER_IPS[@]} workers passed remote compilation; at least $MIN_WORKERS are required."
+            exit 1
+          fi
+          WORKER_IPS=("${PROBED_WORKER_IPS[@]}")
+          WORKER_SLOTS=("${PROBED_WORKER_SLOTS[@]}")
+          REQUIRED_WORKERS=${#WORKER_IPS[@]}
+          echo "Using $REQUIRED_WORKERS verified AMD 3 workers."
 
           # Keep the four selected workers; stop unused candidates and their retry runs.
           KEEP_WORKER_SLOTS=" ${WORKER_SLOTS[*]} "
