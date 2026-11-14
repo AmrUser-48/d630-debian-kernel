@@ -55,7 +55,7 @@ jobs:
           [[ "$MASTER_IP" =~ ^100\.([0-9]{1,3}\.){2}[0-9]{1,3}$ ]] || { echo "::error::Master must use a Tailscale IPv4 address."; exit 1; }
           [[ "$WORKER_ATTEMPT" =~ ^[0-2]$ ]] || { echo "::error::Worker attempt must be between 0 and 2."; exit 1; }
 
-      - name: Match AMD 3 worker runner (maximum 2 restarts)
+      - name: Match AMD 80 worker runner (maximum 2 restarts)
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
           CLUSTER_ID: ${{ inputs.cluster_id }}
@@ -64,7 +64,7 @@ jobs:
           WORKER_ATTEMPT: ${{ inputs.worker_attempt }}
         run: |
           set -Eeuo pipefail
-          EXPECTED_CPU='AMD EPYC 7763 64-Core Processor'
+          EXPECTED_CPU='AMD EPYC 9V74 80-Core Processor'
           CPU_MODEL="$(awk -F': ' '/^model name[[:space:]]*:/ { print $2; exit }' /proc/cpuinfo)"
           echo "Worker slot: $WORKER_SLOT"
           echo "Detected CPU model: ${CPU_MODEL:-unknown}"
@@ -72,12 +72,12 @@ jobs:
           echo "Worker restart count: $WORKER_ATTEMPT/2"
 
           if [[ "$CPU_MODEL" == "$EXPECTED_CPU" ]]; then
-            echo "AMD 3 CPU match accepted. Joining the leader's Tailscale network."
+            echo "AMD 80 CPU match accepted. Joining the leader's Tailscale network."
             exit 0
           fi
 
           if (( WORKER_ATTEMPT >= 2 )); then
-            echo "::error::Worker slot $WORKER_SLOT did not match AMD 3 after 2 restarts."
+            echo "::error::Worker slot $WORKER_SLOT did not match AMD 80 after 2 restarts."
             exit 1
           fi
           if [[ -z "$GH_PAT" ]]; then
