@@ -16,6 +16,11 @@ on:
         description: "Worker slot (01–18)"
         required: true
         type: string
+      worker_attempt:
+        description: "Automatic CPU-match restart counter (0–2; do not change manually)"
+        required: false
+        default: "0"
+        type: string
 
 permissions:
   contents: read
@@ -42,11 +47,71 @@ jobs:
           CLUSTER_ID: ${{ inputs.cluster_id }}
           MASTER_IP: ${{ inputs.master_ip }}
           WORKER_SLOT: ${{ inputs.worker_slot }}
+          WORKER_ATTEMPT: ${{ inputs.worker_attempt }}
         run: |
           set -Eeuo pipefail
           [[ "$CLUSTER_ID" =~ ^[0-9]+$ ]] || { echo "::error::Invalid cluster ID."; exit 1; }
           [[ "$WORKER_SLOT" =~ ^(0[1-9]|1[0-8])$ ]] || { echo "::error::Worker slot must be 01–18."; exit 1; }
           [[ "$MASTER_IP" =~ ^100\.([0-9]{1,3}\.){2}[0-9]{1,3}$ ]] || { echo "::error::Master must use a Tailscale IPv4 address."; exit 1; }
+          [[ "$WORKER_ATTEMPT" =~ ^[0-2]$ ]] || { echo "::error::Worker attempt must be between 0 and 2."; exit 1; }
+
+      - name: Match AMD 3 worker runner (maximum 2 restarts)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          CLUSTER_ID: ${{ inputs.cluster_id }}
+          MASTER_IP: ${{ inputs.master_ip }}
+          WORKER_SLOT: ${{ inputs.worker_slot }}
+          WORKER_ATTEMPT: ${{ inputs.worker_attempt }}
+        run: |
+          set -Eeuo pipefail
+          EXPECTED_CPU='AMD EPYC 7763 64-Core Processor'
+          CPU_MODEL="$(awk -F': ' '/^model name[[:space:]]*:/ { print $2; exit }' /proc/cpuinfo)"
+          echo "Worker slot: $WORKER_SLOT"
+          echo "Detected CPU model: ${CPU_MODEL:-unknown}"
+          echo "Required CPU model: $EXPECTED_CPU"
+          echo "Worker restart count: $WORKER_ATTEMPT/2"
+
+          if [[ "$CPU_MODEL" == "$EXPECTED_CPU" ]]; then
+            echo "AMD 3 CPU match accepted. Joining the leader's Tailscale network."
+            exit 0
+          fi
+
+          if (( WORKER_ATTEMPT >= 2 )); then
+            echo "::error::Worker slot $WORKER_SLOT did not match AMD 3 after 2 restarts."
+            exit 1
+          fi
+          if [[ -z "$GH_PAT" ]]; then
+            echo "::error::GH_PAT is required to restart a worker after a CPU mismatch."
+            exit 1
+          fi
+
+          NEXT_ATTEMPT=$((WORKER_ATTEMPT + 1))
+          DISPATCH_BODY="$(jq -n \
+            --arg ref "$GITHUB_REF_NAME" \
+            --arg cluster "$CLUSTER_ID" \
+            --arg master "$MASTER_IP" \
+            --arg slot "$WORKER_SLOT" \
+            --arg attempt "$NEXT_ATTEMPT" \
+            '{ref:$ref, inputs:{cluster_id:$cluster, master_ip:$master, worker_slot:$slot, worker_attempt:$attempt}}')"
+          HTTP_STATUS="$(curl --silent --show-error --max-time 30 \
+            --output "$RUNNER_TEMP/worker-restart-response.json" \
+            --write-out '%{http_code}' \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer $GH_PAT" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --header 'Content-Type: application/json' \
+            --data "$DISPATCH_BODY" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/d630-distcc-worker.yml/dispatches" || true)"
+          if [[ "$HTTP_STATUS" != "204" ]]; then
+            echo "::error::Worker restart dispatch failed (HTTP $HTTP_STATUS)."
+            cat "$RUNNER_TEMP/worker-restart-response.json" 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "::notice::CPU mismatch. Dispatched worker restart $NEXT_ATTEMPT/2 for slot $WORKER_SLOT."
+          # End this attempt; the replacement workflow run continues under the same worker slot.
+          exit 1
 
       - name: Join leader Tailscale network
         uses: tailscale/github-action@v4
