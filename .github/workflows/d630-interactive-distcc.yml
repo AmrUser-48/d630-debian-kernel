@@ -1,17 +1,22 @@
 name: D630 Interactive distcc
-run-name: "D630 interactive distcc / ${{ github.ref_name }} / #${{ github.run_number }}"
+run-name: "D630 interactive distcc / ${{ github.ref_name }} / AMD 3 attempt ${{ inputs.lead_attempt }} / #${{ github.run_number }}"
 
 on:
   workflow_dispatch:
     inputs:
       worker_count:
-        description: "Number of helper runners (choose 17 while two existing jobs occupy the 20-job limit)"
+        description: "Number of worker candidates to search (17 recommended; only 4 matching workers are retained)"
         required: true
-        default: "18"
+        default: "17"
         type: choice
         options:
-          - "18"
           - "17"
+          - "18"
+      lead_attempt:
+        description: "Automatic AMD 3 CPU-match restart counter (0–9; do not change manually)"
+        required: false
+        default: "0"
+        type: string
 
 permissions:
   contents: write
@@ -31,6 +36,64 @@ jobs:
         shell: bash
 
     steps:
+      - name: Match AMD 3 lead runner (maximum 9 restarts)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          WORKER_COUNT: ${{ inputs.worker_count }}
+          LEAD_ATTEMPT: ${{ inputs.lead_attempt }}
+        run: |
+          set -Eeuo pipefail
+          EXPECTED_CPU='AMD EPYC 7763 64-Core Processor'
+          [[ "$LEAD_ATTEMPT" =~ ^[0-9]+$ ]] && (( LEAD_ATTEMPT <= 9 )) || {
+            echo "::error::Lead attempt must be an integer between 0 and 9."
+            exit 1
+          }
+
+          CPU_MODEL="$(awk -F': ' '/^model name[[:space:]]*:/ { print $2; exit }' /proc/cpuinfo)"
+          echo "Detected lead CPU model: ${CPU_MODEL:-unknown}"
+          echo "Required AMD 3 CPU model: $EXPECTED_CPU"
+          echo "Lead restart count: $LEAD_ATTEMPT/9"
+
+          if [[ "$CPU_MODEL" == "$EXPECTED_CPU" ]]; then
+            echo "AMD 3 lead CPU match accepted. Continuing runner setup."
+            exit 0
+          fi
+
+          if (( LEAD_ATTEMPT >= 9 )); then
+            echo "::error::Lead runner did not match AMD 3 after 9 restarts."
+            exit 1
+          fi
+          if [[ -z "$GH_PAT" ]]; then
+            echo "::error::GH_PAT is required to restart the lead after a CPU mismatch."
+            exit 1
+          fi
+
+          NEXT_ATTEMPT=$((LEAD_ATTEMPT + 1))
+          DISPATCH_BODY="$(jq -n \
+            --arg ref "$GITHUB_REF_NAME" \
+            --arg worker_count "$WORKER_COUNT" \
+            --arg attempt "$NEXT_ATTEMPT" \
+            '{ref:$ref, inputs:{worker_count:$worker_count, lead_attempt:$attempt}}')"
+          HTTP_STATUS="$(curl --silent --show-error --max-time 30 \
+            --output "$RUNNER_TEMP/lead-restart-response.json" \
+            --write-out '%{http_code}' \
+            --request POST \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer $GH_PAT" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --header 'Content-Type: application/json' \
+            --data "$DISPATCH_BODY" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/d630-interactive-distcc.yml/dispatches" || true)"
+          if [[ "$HTTP_STATUS" != "204" ]]; then
+            echo "::error::Lead restart dispatch failed (HTTP $HTTP_STATUS)."
+            cat "$RUNNER_TEMP/lead-restart-response.json" 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "::notice::CPU mismatch. Dispatched lead restart $NEXT_ATTEMPT/9."
+          # End this attempt; the replacement workflow run will test the next runner.
+          exit 1
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -544,85 +607,88 @@ jobs:
               --ref main \
               -f "cluster_id=$GITHUB_RUN_ID" \
               -f "master_ip=$MASTER_IP" \
-              -f "worker_slot=$slot"
+              -f "worker_slot=$slot" \
+              -f "worker_attempt=0"
           done
 
           WORKER_PREFIX="d630-distcc-$GITHUB_RUN_ID-w"
+          REQUIRED_WORKERS=4
+          TCP_READY_DIR="$RUNNER_TEMP/distcc-tcp-ready"
+          mkdir -p "$TCP_READY_DIR"
           WORKER_IPS=()
-          echo "Waiting up to 15 minutes for all $WORKER_COUNT Tailscale workers..."
+          WORKER_SLOTS=()
+          echo "Waiting up to 15 minutes for $REQUIRED_WORKERS AMD 3 workers out of $WORKER_COUNT candidates..."
+
           for attempt in {1..90}; do
-            mapfile -t WORKER_IPS < <(
+            mapfile -t ONLINE_WORKERS < <(
               tailscale status --json |
                 jq -r --arg prefix "$WORKER_PREFIX" '
                   [
                     .Peer[]?
                     | select((.HostName // "") | startswith($prefix))
                     | select(.Online == true)
-                    | (.TailscaleIPs[0] // empty)
-                    | select(startswith("100."))
+                    | {
+                        host: (.HostName // ""),
+                        ip: (.TailscaleIPs[0] // "")
+                      }
+                    | select(.ip | startswith("100."))
                   ]
-                  | unique
-                  | .[]'
+                  | sort_by(.host)
+                  | .[]
+                  | [.host, .ip]
+                  | @tsv'
             )
-            printf 'Online workers: %s/%s\n' "${#WORKER_IPS[@]}" "$WORKER_COUNT"
-            if (( ${#WORKER_IPS[@]} == WORKER_COUNT )); then
-              break
-            fi
-            sleep 10
-          done
 
-          if (( ${#WORKER_IPS[@]} != WORKER_COUNT )); then
-            echo "::error::Only ${#WORKER_IPS[@]}/$WORKER_COUNT workers joined the tailnet."
-            tailscale status || true
-            exit 1
-          fi
-
-          # A Tailscale peer can be online before its distccd listener exists.
-          # Probe all worker ports concurrently and do not start compilation until
-          # every worker accepts TCP connections on port 3632.
-          TCP_READY_DIR="$RUNNER_TEMP/distcc-tcp-ready"
-          mkdir -p "$TCP_READY_DIR"
-          NOT_READY_WORKERS=()
-          echo "All workers joined. Waiting for distccd TCP listeners (port 3632)..."
-          for attempt in {1..60}; do
             rm -f "$TCP_READY_DIR"/*
             TCP_CHECK_PIDS=()
-            for index in "${!WORKER_IPS[@]}"; do
-              worker_ip="${WORKER_IPS[$index]}"
+            for index in "${!ONLINE_WORKERS[@]}"; do
+              IFS=$'\t' read -r worker_host worker_ip <<<"${ONLINE_WORKERS[$index]}"
               (
                 if timeout 5 bash -c ':</dev/tcp/$1/3632' _ "$worker_ip" >/dev/null 2>&1; then
-                  : > "$TCP_READY_DIR/$index"
+                  printf '%s\t%s\n' "$worker_host" "$worker_ip" > "$TCP_READY_DIR/$index"
                 fi
               ) &
               TCP_CHECK_PIDS+=("$!")
             done
             for pid in "${TCP_CHECK_PIDS[@]}"; do
-              wait "$pid"
+              wait "$pid" || true
             done
 
-            NOT_READY_WORKERS=()
-            for index in "${!WORKER_IPS[@]}"; do
-              if [[ ! -e "$TCP_READY_DIR/$index" ]]; then
-                NOT_READY_WORKERS+=("${WORKER_IPS[$index]}")
+            mapfile -t READY_WORKERS < <(cat "$TCP_READY_DIR"/* 2>/dev/null | sort -k1,1 || true)
+            READY_WORKER_IPS=()
+            READY_WORKER_SLOTS=()
+            for record in "${READY_WORKERS[@]}"; do
+              IFS=$'\t' read -r worker_host worker_ip <<<"$record"
+              worker_slot="${worker_host#"$WORKER_PREFIX"}"
+              if [[ "$worker_slot" =~ ^[0-9]{2}$ && "$worker_ip" =~ ^100\. ]]; then
+                READY_WORKER_SLOTS+=("$worker_slot")
+                READY_WORKER_IPS+=("$worker_ip")
               fi
             done
 
-            if (("${#NOT_READY_WORKERS[@]}" == 0)); then
-              echo "All $WORKER_COUNT workers accept TCP connections on port 3632."
+            printf 'Online AMD 3 candidates: %s/%s; distccd-ready: %s/%s\n' \
+              "${#ONLINE_WORKERS[@]}" "$WORKER_COUNT" \
+              "${#READY_WORKER_IPS[@]}" "$REQUIRED_WORKERS"
+            if (( ${#READY_WORKER_IPS[@]} >= REQUIRED_WORKERS )); then
+              WORKER_IPS=("${READY_WORKER_IPS[@]:0:REQUIRED_WORKERS}")
+              WORKER_SLOTS=("${READY_WORKER_SLOTS[@]:0:REQUIRED_WORKERS}")
               break
             fi
-
-            printf 'Waiting for %s/%s distccd listeners: %s\n' \
-              "${#NOT_READY_WORKERS[@]}" "$WORKER_COUNT" "${NOT_READY_WORKERS[*]}"
-            if (( attempt == 60 )); then
-              echo "::error::Workers did not open distccd TCP port 3632 within five minutes."
-              tailscale status || true
-              exit 1
-            fi
-            sleep 5
+            sleep 10
           done
 
-          echo "TCP readiness confirmed. Verifying real remote compiler execution on every worker."
+          if (( ${#WORKER_IPS[@]} < REQUIRED_WORKERS )); then
+            echo "::error::Only ${#WORKER_IPS[@]}/$REQUIRED_WORKERS AMD 3 workers became ready from $WORKER_COUNT candidates within 15 minutes."
+            tailscale status || true
+            exit 1
+          fi
+
+          echo "Selected $REQUIRED_WORKERS AMD 3 workers with active distccd listeners:"
+          for index in "${!WORKER_IPS[@]}"; do
+            printf '  slot %s: %s\n' "${WORKER_SLOTS[$index]}" "${WORKER_IPS[$index]}"
+          done
+
+          echo "TCP readiness confirmed. Verifying real remote compiler execution on every selected worker."
           mkdir -p "$RUNNER_TEMP/distcc-probe"
           printf 'int d630_distcc_probe(void) { return 76; }\n' \
             > "$RUNNER_TEMP/distcc-probe/probe.c"
@@ -648,6 +714,135 @@ jobs:
               exit 1
             fi
             echo "Worker $worker_ip passed a remote-only compile probe."
+          done
+
+          # Keep the four selected workers; stop unused candidates and their retry runs.
+          KEEP_WORKER_SLOTS=" ${WORKER_SLOTS[*]} "
+          mapfile -t ACTIVE_WORKER_RUNS < <(
+            gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow "$WORKER_WORKFLOW" \
+              --limit 100 \
+              --json databaseId,displayTitle,status \
+              --jq ".[] | select(.status == \"queued\" or .status == \"in_progress\") | select(.displayTitle | startswith(\"D630 distcc cluster $GITHUB_RUN_ID worker \")) | [.databaseId, .displayTitle] | @tsv"
+          )
+          for worker_run in "${ACTIVE_WORKER_RUNS[@]}"; do
+            IFS=          sudo systemctl stop distcc.service 2>/dev/null || true
+          sudo pkill -x distccd 2>/dev/null || true
+          mkdir -p "$RUNNER_TEMP/distcc-master"
+          distccd --daemon \
+            --listen 127.0.0.1 \
+            --port 3632 \
+            --allow 127.0.0.1/32 \
+            --jobs 4 \
+            --log-file "$RUNNER_TEMP/distcc-master/distccd.log" \
+            --pid-file "$RUNNER_TEMP/distcc-master/distccd.pid"
+
+          for attempt in {1..15}; do
+            if ss -H -ltn 'sport = :3632' | grep -Fq '127.0.0.1:3632'; then
+              break
+            fi
+            sleep 1
+          done
+          ss -H -ltn 'sport = :3632' | grep -Fq '127.0.0.1:3632' || {
+            echo "::error::Leader distccd failed to listen on loopback."
+            cat "$RUNNER_TEMP/distcc-master/distccd.log" || true
+            exit 1
+          }
+          DISTCC_FALLBACK=0 DISTCC_HOSTS=127.0.0.1/4 \
+            distcc gcc -c "$RUNNER_TEMP/distcc-probe/probe.c" \
+              -o "$RUNNER_TEMP/distcc-probe/master.o"
+
+          DISTCC_HOSTS_VALUE="127.0.0.1/4"
+          for worker_ip in "${WORKER_IPS[@]}"; do
+            DISTCC_HOSTS_VALUE+=" $worker_ip/4"
+          done
+
+          TOTAL_RUNNERS=$((REQUIRED_WORKERS + 1))
+          TOTAL_VCPUS=$((TOTAL_RUNNERS * 4))
+          TOTAL_RAM_GB=$((TOTAL_RUNNERS * 16))
+          install -d -m 0755 "$HOME/.config/d630-distcc" "$HOME/.cache/distcc"
+          printf '%s\n' "${WORKER_IPS[@]}" > "$HOME/.config/d630-distcc/workers"
+          {
+            printf 'export DISTCC_HOSTS=%q\n' "$DISTCC_HOSTS_VALUE"
+            printf 'export DISTCC_DIR=%q\n' "$HOME/.cache/distcc"
+            printf 'export CC=%q\n' 'distcc gcc'
+            printf 'export CXX=%q\n' 'distcc g++'
+            printf 'export CFLAGS=%q\n' '-O2 -pipe -march=core2 -mtune=core2'
+            printf 'export BUILD_JOBS=%s\n' "$TOTAL_VCPUS"
+            printf 'export MAKEFLAGS=-j%s\n' "$TOTAL_VCPUS"
+          } > "$HOME/.config/d630-distcc/env"
+          chmod 0644 "$HOME/.config/d630-distcc/env"
+
+          if ! grep -Fq 'd630-distcc/env' "$HOME/.bashrc"; then
+            cat >> "$HOME/.bashrc" <<'D630_DISTCC_BASHRC'
+          [[ -r "$HOME/.config/d630-distcc/env" ]] && source "$HOME/.config/d630-distcc/env"
+          D630_DISTCC_BASHRC
+          fi
+
+          source "$HOME/.config/d630-distcc/env"
+          echo
+          echo "D630 DISTCC CLUSTER READY"
+          echo "Allocated: $TOTAL_RUNNERS runners x 4 vCPU = $TOTAL_VCPUS vCPU; $TOTAL_RUNNERS x 16 GB = $TOTAL_RAM_GB GB RAM."
+          echo "distcc hosts:"
+          distcc --show-hosts
+          echo
+          echo "Interactive shell defaults: CC='$CC' CXX='$CXX' MAKEFLAGS='$MAKEFLAGS'"
+          echo "Use distccmon-text 1 to watch active remote compilation."
+          echo "Worker addresses saved to ~/.config/d630-distcc/workers"
+
+      - name: Keep interactive distcc master available
+        timeout-minutes: 335
+        run: |
+          set -Eeuo pipefail
+          echo "Master and its 18 distcc workers remain available until cancellation or timeout."
+          sleep 19800
+
+      - name: Stop distcc worker workflows
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set +e
+          WORKER_WORKFLOW=d630-distcc-worker.yml
+          mapfile -t WORKER_RUN_IDS < <(
+            gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow "$WORKER_WORKFLOW" \
+              --limit 100 \
+              --json databaseId,displayTitle \
+              --jq ".[] | select(.displayTitle | contains(\"D630 distcc cluster $GITHUB_RUN_ID worker\")) | .databaseId"
+          )
+          echo "Stopping ${#WORKER_RUN_IDS[@]} worker workflows for leader $GITHUB_RUN_ID."
+          for worker_run_id in "${WORKER_RUN_IDS[@]}"; do
+            gh run cancel "$worker_run_id" --repo "$GITHUB_REPOSITORY" || true
+          done
+
+      - name: Upload final workspace artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d630-runner-workspace-${{ github.run_id }}
+          path: |
+            ${{ github.workspace }}/
+            !${{ github.workspace }}/.git/**
+            !${{ github.workspace }}/**/.git/**
+            !${{ github.workspace }}/.ssh/**
+            !${{ github.workspace }}/**/.ssh/**
+            !${{ github.workspace }}/.env
+            !${{ github.workspace }}/.env.*
+            !${{ github.workspace }}/**/.env
+            !${{ github.workspace }}/**/.env.*
+            !${{ github.workspace }}/**/*.pem
+            !${{ github.workspace }}/**/*.p12
+          include-hidden-files: true
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: warn
+\t' read -r worker_run_id worker_title <<<"$worker_run"
+            worker_slot="${worker_title##* worker }"
+            if [[ "$KEEP_WORKER_SLOTS" != *" $worker_slot "* ]]; then
+              echo "Cancelling unused worker slot $worker_slot (run $worker_run_id)."
+              gh run cancel "$worker_run_id" --repo "$GITHUB_REPOSITORY" || true
+            fi
           done
 
           # Make the leader's own four allocated CPUs available to distcc too.
@@ -682,7 +877,7 @@ jobs:
             DISTCC_HOSTS_VALUE+=" $worker_ip/4"
           done
 
-          TOTAL_RUNNERS=$((WORKER_COUNT + 1))
+          TOTAL_RUNNERS=$((REQUIRED_WORKERS + 1))
           TOTAL_VCPUS=$((TOTAL_RUNNERS * 4))
           TOTAL_RAM_GB=$((TOTAL_RUNNERS * 16))
           install -d -m 0755 "$HOME/.config/d630-distcc" "$HOME/.cache/distcc"
