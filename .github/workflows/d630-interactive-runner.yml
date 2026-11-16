@@ -259,6 +259,13 @@ jobs:
           git --version
           gh --version
 
+      - name: Install GitHub and Git MCP servers for Agy
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -Eeuo pipefail
+          bash scripts/install-agy-mcp-servers.sh
+
       - name: Join Tailscale
         uses: tailscale/github-action@v4
         with:
