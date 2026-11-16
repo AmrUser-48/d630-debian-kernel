@@ -66,6 +66,7 @@ fi
 D630_MCP_TOKEN_ENV
 fi
 
-echo "GitHub MCP Server: $("$BIN_DIR/github-mcp-server" --version 2>/dev/null || echo installed)"
+"$BIN_DIR/github-mcp-server" --help >/dev/null 2>&1
+echo "GitHub MCP Server: installed"
 echo "Git MCP Server: $("$BIN_DIR/mcp-server-git" --help >/dev/null 2>&1 && echo installed)"
 echo "Git MCP repository: $(<"$CONFIG_DIR/git-mcp-repository")"
