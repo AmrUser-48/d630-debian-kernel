@@ -481,7 +481,7 @@ jobs:
           echo "Automatic GitHub Release checkpoints: first at 15 minutes, then every 30 minutes."
           echo "Manual snapshot command: sudo -u runner /usr/local/sbin/d630-save-workspace"
 
-      - name: Start SSH on the Tailscale interface
+      - name: Start supervised SSH and publish Mosh access on Tailscale
         run: |
           set -Eeuo pipefail
 
@@ -515,9 +515,9 @@ jobs:
 
           sudo ssh-keygen -A
 
-          # Stop the hosted SSH listeners before starting the Tailscale-only listener.
-          sudo systemctl stop ssh.socket 2>/dev/null || true
-          sudo systemctl stop ssh.service 2>/dev/null || true
+          # Disable the hosted image's socket/service so only the Tailscale-bound
+          # D630 SSH service owns port 22.
+          sudo systemctl disable --now ssh.socket ssh.service 2>/dev/null || true
           sudo pkill -x sshd 2>/dev/null || true
           sleep 1
           sudo rm -f /run/sshd.pid
@@ -527,32 +527,59 @@ jobs:
             exit 1
           fi
 
-          # ssh.service owns /run/sshd as a RuntimeDirectory and removes it on stop.
-          # Recreate it only after stopping the service, then validate sshd config.
-          sudo install -d -o root -g root -m 0755 /run/sshd
-          sudo /usr/sbin/sshd -t
+          # Keep sshd outside the Actions step process tree. Mosh uses SSH to
+          # launch a per-session mosh-server, then carries the terminal over UDP.
+          sudo tee /etc/systemd/system/d630-sshd.service >/dev/null <<'D630_SSHD_UNIT'
+          [Unit]
+          Description=D630 Tailscale SSH transport for Mosh and fallback access
+          Wants=network-online.target tailscaled.service
+          After=network-online.target tailscaled.service
 
-          # Run sshd directly rather than relying on the hosted image's systemd
-          # service unit, which failed during enable/restart in the previous run.
-          if ! sudo /usr/sbin/sshd -e; then
-            echo "::error::sshd failed to start; diagnostics follow."
-            sudo /usr/sbin/sshd -T | grep -E '^(port|listenaddress|authorizedkeysfile|allowusers) '
-            sudo journalctl -u ssh.service -n 60 --no-pager || true
+          [Service]
+          Type=simple
+          RuntimeDirectory=sshd
+          RuntimeDirectoryMode=0755
+          ExecStartPre=/usr/sbin/sshd -t
+          ExecStart=/usr/sbin/sshd -D -e
+          Restart=always
+          RestartSec=2s
+          StartLimitIntervalSec=0
+          KillSignal=SIGTERM
+          TimeoutStopSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+          D630_SSHD_UNIT
+
+          sudo systemctl daemon-reload
+          if ! sudo systemctl enable --now d630-sshd.service; then
+            echo "::error::Could not start the supervised D630 SSH service."
+            sudo journalctl -u d630-sshd.service -n 80 --no-pager || true
             exit 1
           fi
 
-          for attempt in {1..10}; do
-            if sudo ss -H -ltnp 'sport = :22' | grep -F "$TAILSCALE_IP:22"; then
+          for attempt in {1..15}; do
+            if sudo systemctl is-active --quiet d630-sshd.service &&
+               sudo ss -H -ltnp 'sport = :22' | grep -Fq "$TAILSCALE_IP:22"; then
               break
             fi
             sleep 1
           done
+
           LISTENERS="$(sudo ss -H -ltnp 'sport = :22' || true)"
           printf '%s\n' "$LISTENERS"
-          grep -Fq "$TAILSCALE_IP:22" <<<"$LISTENERS" || {
-            echo "::error::sshd did not bind to $TAILSCALE_IP:22."
-            sudo journalctl -u ssh.service -n 60 --no-pager || true
+          if ! sudo systemctl is-active --quiet d630-sshd.service ||
+             ! grep -Fq "$TAILSCALE_IP:22" <<<"$LISTENERS"; then
+            echo "::error::The supervised SSH daemon did not bind to $TAILSCALE_IP:22."
+            sudo systemctl status d630-sshd.service --no-pager || true
+            sudo journalctl -u d630-sshd.service -n 80 --no-pager || true
             pgrep -a -x sshd || true
+            exit 1
+          fi
+
+          MOSH_SERVER="$(command -v mosh-server || true)"
+          [[ -x "$MOSH_SERVER" ]] || {
+            echo "::error::mosh-server is not installed or executable."
             exit 1
           }
           timeout 3 bash -c ":</dev/tcp/$TAILSCALE_IP/22"
@@ -560,10 +587,12 @@ jobs:
           echo
           echo "D630 INTERACTIVE RUNNER READY"
           echo "Workspace: $GITHUB_WORKSPACE"
-          echo "Tailscale hostname: d630-runner-$GITHUB_RUN_ID"
+          echo "Tailscale hostname: d630-runner-${GITHUB_RUN_ID}"
           echo "Tailscale IPv4: $TAILSCALE_IP"
-          echo "SSH:  ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3 runner@$TAILSCALE_IP"
-          echo "Mosh: mosh --ssh='ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3' runner@$TAILSCALE_IP"
+          echo "Mosh server: $MOSH_SERVER (one process per Mosh session; UDP ports 60000-61000)"
+          echo "Mosh PRIMARY: mosh --ssh='ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3' runner@$TAILSCALE_IP"
+          echo "SSH FALLBACK: ssh -o ServerAliveInterval=20 -o ServerAliveCountMax=3 runner@$TAILSCALE_IP"
+          echo "Supervised SSH service: d630-sshd.service"
           echo "SSH host key fingerprint:"
           sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
           echo
