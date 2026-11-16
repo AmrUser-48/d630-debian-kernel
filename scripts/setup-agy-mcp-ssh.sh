@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-: "${SSH_PUBLIC_KEY:?SSH_PUBLIC_KEY repository secret is required}"
+: "${SSH_PUBLIC_KEY:=}"
+DEFAULT_SSH_PUBLIC_KEY='ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDX0Iq6/I6uP98Yd23xSKOSJIsMLncttaqvWnYHB5yfhpr4TQij9TG4h9Dwm27txqBEfhwQiM3LCjqcU2eKD5EWn2Bn+QB0dvu6aTN0oSeN0v7h0bXM+FSfKgT04YyjLbB8jqzv8CzQdW/A3hKWm19qIRuYBO5uowpLy1n+HzmWa3SHNQN+NeIMGRXou7xL+o9T2Q49f8IeqV1/8iCyLlJKjDrB+OalKY3CZiO5J0BwW5PZ6LG/jt66BiRYNpaKDSKkJm3DTqtiKtd78fGWOjjGbEUsjmKYllcSo3EziKj0XUTnSoiMxS3R63h2V0nxk8k6j4SF64vBgvujlhiFcfKQvBqw1cUNvzR9bPiNfVoC0gjvTmFPdnBJdGePS7I8mowxwnhj1gzl+aayXT6VHPkePQ/Yt6zUIucUyY6/WsGQsOj4F4ypYzZn+TXRVuEDs0G3f2I1h5yVGUm+R6wwwyIadTSpVgbXPhFbIHxk27qvY5ybLBv41hjepfIDXURRARE= jeroen@dell'
+SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY:-$DEFAULT_SSH_PUBLIC_KEY}"
 TAILSCALE_IP="$(tailscale ip -4 | awk '/^100[.]/ { print; exit }')"
 [[ "$TAILSCALE_IP" =~ ^100[.] ]] || {
   echo "::error::Tailscale did not provide a private IPv4 address." >&2
