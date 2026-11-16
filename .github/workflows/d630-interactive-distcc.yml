@@ -310,7 +310,7 @@ jobs:
           STARTUP_STDOUT="$(bash --noprofile -c 'source "$HOME/.bashrc"; printf "__D630_CLEAN_STDOUT__"')"
           if [[ "$STARTUP_STDOUT" != "__D630_CLEAN_STDOUT__" ]]; then
             echo "::error::Non-interactive Bash startup polluted stdout; refusing to publish the runner."
-            printf '%s\\n' "$STARTUP_STDOUT" >&2
+            printf '%s\n' "$STARTUP_STDOUT" >&2
             exit 1
           fi
           echo "Non-interactive SSH shell startup is stdout-clean (MCP JSON-RPC safe)."
@@ -528,8 +528,8 @@ jobs:
 
           # Ubuntu's pam_motd can write MOTD text to SSH session stdout even
           # when sshd PrintMotd is disabled. That corrupts MCP JSON-RPC streams.
-          sudo sed -i -E '/^[[:space:]]*[^#].*pam_motd\\.so/s/^/# D630 MCP stdio: disabled PAM MOTD: /' /etc/pam.d/sshd
-          if grep -Eq '^[[:space:]]*[^#].*pam_motd\\.so' /etc/pam.d/sshd; then
+          sudo sed -i -E '/^[[:space:]]*[^#].*pam_motd\.so/s/^/# D630 MCP stdio: disabled PAM MOTD: /' /etc/pam.d/sshd
+          if grep -Eq '^[[:space:]]*[^#].*pam_motd\.so' /etc/pam.d/sshd; then
             echo "::error::An active pam_motd hook remains in /etc/pam.d/sshd."
             exit 1
           fi
