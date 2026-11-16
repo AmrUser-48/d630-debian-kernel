@@ -120,6 +120,25 @@ jobs:
           hostname: d630-distcc-${{ inputs.cluster_id }}-w${{ inputs.worker_slot }}
           use-cache: "true"
 
+      - name: Checkout repository for Git MCP
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install GitHub and Git MCP servers for Agy
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -Eeuo pipefail
+          bash scripts/install-agy-mcp-servers.sh
+
+      - name: Start Tailscale-only SSH for Agy MCP
+        env:
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+        run: |
+          set -Eeuo pipefail
+          bash scripts/setup-agy-mcp-ssh.sh
+
       - name: Install compiler tools
         env:
           CLUSTER_ID: ${{ inputs.cluster_id }}
