@@ -473,6 +473,7 @@ jobs:
           Description=D630 Tailscale SSH transport for Mosh and fallback access
           Wants=network-online.target tailscaled.service
           After=network-online.target tailscaled.service
+          StartLimitIntervalSec=0
 
           [Service]
           Type=simple
@@ -482,7 +483,6 @@ jobs:
           ExecStart=/usr/sbin/sshd -D -e
           Restart=always
           RestartSec=2s
-          StartLimitIntervalSec=0
           KillSignal=SIGTERM
           TimeoutStopSec=10
 
