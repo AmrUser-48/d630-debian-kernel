@@ -456,6 +456,7 @@ jobs:
           X11Forwarding no
           PermitTunnel no
           Compression no
+          PermitUserRC no
           PrintMotd no
           PrintLastLog no
           Banner none
@@ -464,6 +465,15 @@ jobs:
           ClientAliveCountMax 6
           MaxSessions 12
           EOF
+
+          # Ubuntu's pam_motd can write MOTD text to SSH session stdout even
+          # when sshd PrintMotd is disabled. That corrupts MCP JSON-RPC streams.
+          sudo sed -i -E '/^[[:space:]]*[^#].*pam_motd\\.so/s/^/# D630 MCP stdio: disabled PAM MOTD: /' /etc/pam.d/sshd
+          if grep -Eq '^[[:space:]]*[^#].*pam_motd\\.so' /etc/pam.d/sshd; then
+            echo "::error::An active pam_motd hook remains in /etc/pam.d/sshd."
+            exit 1
+          fi
+          touch "$HOME/.hushlogin"
 
           sudo ssh-keygen -A
 
