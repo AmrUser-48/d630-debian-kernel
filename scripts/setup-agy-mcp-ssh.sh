@@ -111,5 +111,16 @@ if [[ "$STARTUP_STDOUT" != "__D630_CLEAN_STDOUT__" ]]; then
 fi
 
 echo "Agy MCP SSH ready: runner@$TAILSCALE_IP"
+echo "GitHub MCP: $HOME/.local/bin/github-mcp-server stdio --toolsets all"
+echo "Git MCP: $HOME/.local/bin/mcp-server-git --repository $(<"$HOME/.config/d630-runner/git-mcp-repository")"
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  {
+    echo
+    echo "## Agy MCP access"
+    echo "- SSH host: runner@$TAILSCALE_IP"
+    echo "- GitHub MCP: installed with all toolsets and write-capable tools"
+    echo "- Git MCP repository: $(<"$HOME/.config/d630-runner/git-mcp-repository")"
+  } >> "$GITHUB_STEP_SUMMARY"
+fi
 echo "SSH fingerprint:"
 sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
