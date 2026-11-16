@@ -96,6 +96,8 @@ jobs:
           exec > >(tee -a "build-$BUILD_VARIANT.log") 2>&1
           bash -n scripts/build-d630-kernel.sh
           bash -n scripts/verify-d630-kernel-build.sh
+          bash -n scripts/install-agy-mcp-servers.sh
+          bash -n scripts/setup-agy-mcp-ssh.sh
           python3 -m py_compile \
             scripts/d630_kconfig.py \
             scripts/apply-d630-policy.py \
@@ -107,7 +109,7 @@ jobs:
             --output "$RUNNER_TEMP/actionlint.tar.gz"
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
           tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
-          "$RUNNER_TEMP/actionlint" .github/workflows/d630-kernel-build.yml .github/workflows/d630-interactive-runner.yml
+          "$RUNNER_TEMP/actionlint" .github/workflows/*.yml
 
       - name: Build Debian kernel package
         timeout-minutes: 330
