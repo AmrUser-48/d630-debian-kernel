@@ -245,6 +245,16 @@ jobs:
           fi
           EOF
 
+          # MCP stdio requires clean stdout. The deployed .bashrc must stay silent
+          # when sourced by a non-interactive SSH remote command.
+          STARTUP_STDOUT="$(bash --noprofile -c 'source "$HOME/.bashrc"; printf "__D630_CLEAN_STDOUT__"')"
+          if [[ "$STARTUP_STDOUT" != "__D630_CLEAN_STDOUT__" ]]; then
+            echo "::error::Non-interactive Bash startup polluted stdout; refusing to publish the runner."
+            printf '%s\\n' "$STARTUP_STDOUT" >&2
+            exit 1
+          fi
+          echo "Non-interactive SSH shell startup is stdout-clean (MCP JSON-RPC safe)."
+
           gh auth status
           git --version
           gh --version
@@ -446,6 +456,9 @@ jobs:
           X11Forwarding no
           PermitTunnel no
           Compression no
+          PrintMotd no
+          PrintLastLog no
+          Banner none
           TCPKeepAlive yes
           ClientAliveInterval 30
           ClientAliveCountMax 6
