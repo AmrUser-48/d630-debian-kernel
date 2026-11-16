@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 : "${SSH_PUBLIC_KEY:?SSH_PUBLIC_KEY repository secret is required}"
-TAILSCALE_IP="$(tailscale ip -4 | awk '/^100\\./ { print; exit }')"
-[[ "$TAILSCALE_IP" =~ ^100\\. ]] || {
+TAILSCALE_IP="$(tailscale ip -4 | awk '/^100[.]/ { print; exit }')"
+[[ "$TAILSCALE_IP" =~ ^100[.] ]] || {
   echo "::error::Tailscale did not provide a private IPv4 address." >&2
   exit 1
 }
@@ -44,8 +44,8 @@ EOF
 
 # Ubuntu PAM MOTD can write text to SSH stdout despite PrintMotd=no.
 # That would corrupt MCP's JSON-RPC stdio stream.
-sudo sed -i -E '/^[[:space:]]*[^#].*pam_motd\\.so/s/^/# D630 MCP stdio: disabled PAM MOTD: /' /etc/pam.d/sshd
-if grep -Eq '^[[:space:]]*[^#].*pam_motd\\.so' /etc/pam.d/sshd; then
+sudo sed -i -E '/^[[:space:]]*[^#].*pam_motd[.]so/s/^/# D630 MCP stdio: disabled PAM MOTD: /' /etc/pam.d/sshd
+if grep -Eq '^[[:space:]]*[^#].*pam_motd[.]so' /etc/pam.d/sshd; then
   echo "::error::An active pam_motd hook remains in /etc/pam.d/sshd." >&2
   exit 1
 fi
