@@ -160,7 +160,7 @@ jobs:
           command -v gh
           command -v mosh-server
 
-          sudo mkdir -p /lib/f          sudo mkdir -p /lib/firmware /lib/firmware/intel-ucode
+          sudo mkdir -p /lib/firmware /lib/firmware/intel-ucode
 
           # Fetch only the legacy Intel 3945 firmware needed by the D630.
           # Avoid installing the 112 MB linux-firmware-intel-wireless package.
@@ -181,7 +181,7 @@ jobs:
           stat -c '%n: %s bytes' "$WIFI_TARGET"
           sha256sum "$WIFI_TARGET"
 
-ready installs this exact file under /usr/lib;
+          # intel-microcode already installs this exact file under /usr/lib;
           # /lib is the same firmware tree on Ubuntu. Validate it in place.
           MICROCODE=/lib/firmware/intel-ucode/06-0f-0d
           test -s "$MICROCODE" || {
