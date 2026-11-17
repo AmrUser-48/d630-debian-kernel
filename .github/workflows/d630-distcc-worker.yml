@@ -152,7 +152,7 @@ jobs:
           [[ "$WORKER_IP" =~ ^100\. ]] || { echo "::error::No Tailscale IPv4 address assigned."; exit 1; }
 
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends build-essential distcc gcc-14 g++-14
+          sudo apt-get install --no-upgrade --yes --no-install-recommends build-essential distcc gcc-14 g++-14
 
           # The package may provide a service; this workflow starts its own
           # restricted daemon in the long-lived serving step below.
