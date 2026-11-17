@@ -72,7 +72,7 @@ jobs:
           fi
 
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
+          sudo apt-get install --no-upgrade --yes --no-install-recommends \
             openssh-server mosh \
             git gh \
             neovim lf fd-find ripgrep fzf tmux htop jq tree bat less bash-completion \
@@ -267,12 +267,6 @@ jobs:
             printf '%s' "$GEMINI_CONFIG_B64" |
               base64 --decode |
               tar -xz --no-same-owner -C "$HOME"
-            [[ -d "$HOME/.gemini" ]] || {
-              echo "::error::GEMINI_CONFIG_B64 does not contain .gemini/."
-              exit 1
-            }
-            chmod -R go-rwx "$HOME/.gemini"
-            echo "Restored $HOME/.gemini"
           else
             echo "::notice::GEMINI_CONFIG_B64 is not set; .gemini was not restored."
           fi
@@ -281,12 +275,6 @@ jobs:
             printf '%s' "$AGY_CONFIG_B64" |
               base64 --decode |
               tar -xz --no-same-owner -C "$HOME"
-            [[ -d "$HOME/.config/agy-open" ]] || {
-              echo "::error::AGY_CONFIG_B64 does not contain .config/agy-open/."
-              exit 1
-            }
-            chmod -R go-rwx "$HOME/.config/agy-open"
-            echo "Restored $HOME/.config/agy-open"
           else
             echo "::notice::AGY_CONFIG_B64 is not set; Agy user configuration was not restored."
           fi
