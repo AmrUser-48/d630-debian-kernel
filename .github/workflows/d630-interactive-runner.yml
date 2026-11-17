@@ -282,7 +282,8 @@ jobs:
           if [[ -n "$GEMINI_API_KEY" ]]; then
             install -d -m 0700 "$HOME/.config/d630-runner"
             printf '%s' "$GEMINI_API_KEY" > "$HOME/.config/d630-runner/gemini-api-key"
-            chmod 0600 "$HOME/.config/d630-runner/gemini-api-key"
+            printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY" > "$HOME/.config/d630-runner/gemini-api.env"
+            chmod 0600 "$HOME/.config/d630-runner/gemini-api-key" "$HOME/.config/d630-runner/gemini-api.env"
 
             if ! grep -Fq '# D630 Gemini API key' "$HOME/.bashrc"; then
               cat >> "$HOME/.bashrc" <<'D630_GEMINI_ENV'
@@ -612,12 +613,116 @@ jobs:
           echo "Disk:"
           df -h "$GITHUB_WORKSPACE"
 
-      - name: Keep interactive runner available
-        timeout-minutes: 335
+      - name: Start Agy browser UI on private Tailscale HTTPS
         run: |
           set -Eeuo pipefail
-          echo "Runner remains available for 5 hours 30 minutes; the remaining job time is reserved for artifact upload."
-          sleep 19800
+
+          ENV_DIR="$HOME/.config/d630-runner"
+          WEB_ENV="$ENV_DIR/agy-web.env"
+          {
+            if [[ -s "$ENV_DIR/gh-token" ]]; then
+              printf 'GH_TOKEN=%s\n' "$(<"$ENV_DIR/gh-token")"
+            fi
+            if [[ -s "$ENV_DIR/gemini-api-key" ]]; then
+              printf 'GEMINI_API_KEY=%s\n' "$(<"$ENV_DIR/gemini-api-key")"
+            fi
+          } > "$WEB_ENV"
+          chmod 0600 "$WEB_ENV"
+
+          sudo tee /etc/systemd/system/d630-agy-web.service >/dev/null <<EOF
+          [Unit]
+          Description=Agy browser UI
+          Wants=network-online.target tailscaled.service
+          After=network-online.target tailscaled.service
+
+          [Service]
+          Type=simple
+          User=runner
+          Group=runner
+          Environment=HOME=/home/runner
+          Environment=PATH=/home/runner/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          EnvironmentFile=-/home/runner/.config/d630-runner/agy-web.env
+          WorkingDirectory=$GITHUB_WORKSPACE
+          ExecStart=/usr/bin/agy serve 8080
+          Restart=always
+          RestartSec=2
+          KillSignal=SIGTERM
+          TimeoutStopSec=15
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now d630-agy-web.service
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8080/ -o /dev/null; then
+              break
+            fi
+            if ! sudo systemctl is-active --quiet d630-agy-web.service; then
+              sudo journalctl -u d630-agy-web.service -n 80 --no-pager || true
+              echo "::error::Agy web UI failed to start."
+              exit 1
+            fi
+            sleep 1
+          done
+
+          curl --fail --silent http://127.0.0.1:8080/ -o /dev/null || {
+            sudo journalctl -u d630-agy-web.service -n 80 --no-pager || true
+            echo "::error::Agy web UI did not answer on 127.0.0.1:8080."
+            exit 1
+          }
+
+          # Serve is private to this Tailscale network; do not use Funnel.
+          sudo tailscale serve --bg 8080
+          sudo tailscale serve status
+
+          TAILSCALE_DNS="$(sudo tailscale status --json | jq -r '.Self.DNSName // empty' | sed 's/\.$//')"
+          if [[ -n "$TAILSCALE_DNS" ]]; then
+            echo "AGY browser UI: https://$TAILSCALE_DNS/"
+          else
+            echo "AGY browser UI is published through Tailscale Serve; use the HTTPS URL printed above."
+          fi
+
+      - name: Keep interactive runner until 10-minute artifact reserve
+        run: |
+          set -Eeuo pipefail
+
+          TOKEN_FILE="$HOME/.config/d630-runner/gh-token"
+          [[ -s "$TOKEN_FILE" ]] || {
+            echo "::error::Missing GH_PAT for reading the Actions job start time."
+            exit 1
+          }
+          export GH_TOKEN="$(<"$TOKEN_FILE")"
+
+          JOB_STARTED_AT="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.status == "in_progress") | .started_at][0] // empty')"
+          if [[ -z "$JOB_STARTED_AT" ]]; then
+            JOB_STARTED_AT="$(gh api \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+              --jq '.run_started_at // empty')"
+          fi
+          [[ -n "$JOB_STARTED_AT" ]] || {
+            echo "::error::Could not determine the Actions job start time."
+            exit 1
+          }
+
+          JOB_STARTED_EPOCH="$(date -u -d "$JOB_STARTED_AT" +%s)"
+          DEADLINE_EPOCH=$((JOB_STARTED_EPOCH + 350 * 60))
+          NOW_EPOCH="$(date -u +%s)"
+          REMAINING_SECONDS=$((DEADLINE_EPOCH - NOW_EPOCH))
+
+          if (( REMAINING_SECONDS > 0 )); then
+            printf 'Runner deadline: %s UTC (job start + 350 minutes).\n' \
+              "$(date -u -d "@$DEADLINE_EPOCH" '+%Y-%m-%d %H:%M:%S')"
+            printf 'Remaining interactive time: %s seconds. Final 10 minutes reserved for artifact upload.\n' \
+              "$REMAINING_SECONDS"
+            sleep "$REMAINING_SECONDS"
+          else
+            echo "::warning::The 350-minute runner deadline has already passed; proceeding to artifact upload."
+          fi
 
       - name: Upload final workspace artifact
         if: always()
