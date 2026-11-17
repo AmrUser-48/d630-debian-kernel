@@ -315,7 +315,7 @@ ready installs this exact file under /usr/lib;
           git --version
           gh --version
 
-      - name: Restore Gemini CLI credentials
+      - name: Restore Gemini and Agy credentials
         env:
           GEMINI_CONFIG_B64: ${{ secrets.GEMINI_CONFIG_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -327,14 +327,17 @@ ready installs this exact file under /usr/lib;
             printf '%s' "$GEMINI_CONFIG_B64" |
               base64 --decode |
               tar -xz --no-same-owner -C "$HOME"
-            if [[ ! -d "$HOME/.gemini" ]]; then
-              echo "::error::GEMINI_CONFIG_B64 did not contain a .gemini directory."
-              exit 1
-            fi
-            chmod -R go-rwx "$HOME/.gemini"
-            echo "Gemini CLI configuration and credentials restored to $HOME/.gemini."
+
+            for config_dir in "$HOME/.gemini" "$HOME/.config/agy-open"; do
+              if [[ ! -d "$config_dir" ]]; then
+                echo "::error::GEMINI_CONFIG_B64 must contain both .gemini/ and .config/agy-open/."
+                exit 1
+              fi
+              chmod -R go-rwx "$config_dir"
+              echo "Restored $config_dir"
+            done
           else
-            echo "::notice::GEMINI_CONFIG_B64 is not set; Gemini CLI directory was not restored."
+            echo "::notice::GEMINI_CONFIG_B64 is not set; Gemini and Agy configuration was not restored."
           fi
 
           if [[ -n "$GEMINI_API_KEY" ]]; then
@@ -344,7 +347,7 @@ ready installs this exact file under /usr/lib;
 
             if ! grep -Fq '# D630 Gemini API key' "$HOME/.bashrc"; then
               cat >> "$HOME/.bashrc" <<'D630_GEMINI_ENV'
-          
+
           # D630 Gemini API key.
           if [[ -r "$HOME/.config/d630-runner/gemini-api-key" ]]; then
             export GEMINI_API_KEY="$(<"$HOME/.config/d630-runner/gemini-api-key")"
