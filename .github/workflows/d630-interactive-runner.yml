@@ -257,6 +257,7 @@ jobs:
       - name: Restore Gemini and Agy credentials
         env:
           GEMINI_CONFIG_B64: ${{ secrets.GEMINI_CONFIG_B64 }}
+          AGY_CONFIG_B64: ${{ secrets.AGY_CONFIG_B64 }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -Eeuo pipefail
@@ -266,17 +267,28 @@ jobs:
             printf '%s' "$GEMINI_CONFIG_B64" |
               base64 --decode |
               tar -xz --no-same-owner -C "$HOME"
-
-            for config_dir in "$HOME/.gemini" "$HOME/.config/agy-open"; do
-              if [[ ! -d "$config_dir" ]]; then
-                echo "::error::GEMINI_CONFIG_B64 must contain both .gemini/ and .config/agy-open/."
-                exit 1
-              fi
-              chmod -R go-rwx "$config_dir"
-              echo "Restored $config_dir"
-            done
+            [[ -d "$HOME/.gemini" ]] || {
+              echo "::error::GEMINI_CONFIG_B64 does not contain .gemini/."
+              exit 1
+            }
+            chmod -R go-rwx "$HOME/.gemini"
+            echo "Restored $HOME/.gemini"
           else
-            echo "::notice::GEMINI_CONFIG_B64 is not set; Gemini and Agy configuration was not restored."
+            echo "::notice::GEMINI_CONFIG_B64 is not set; .gemini was not restored."
+          fi
+
+          if [[ -n "$AGY_CONFIG_B64" ]]; then
+            printf '%s' "$AGY_CONFIG_B64" |
+              base64 --decode |
+              tar -xz --no-same-owner -C "$HOME"
+            [[ -d "$HOME/.config/agy-open" ]] || {
+              echo "::error::AGY_CONFIG_B64 does not contain .config/agy-open/."
+              exit 1
+            }
+            chmod -R go-rwx "$HOME/.config/agy-open"
+            echo "Restored $HOME/.config/agy-open"
+          else
+            echo "::notice::AGY_CONFIG_B64 is not set; Agy user configuration was not restored."
           fi
 
           if [[ -n "$GEMINI_API_KEY" ]]; then
