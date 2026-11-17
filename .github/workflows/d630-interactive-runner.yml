@@ -254,6 +254,49 @@ ready installs this exact file under /usr/lib;
           git --version
           gh --version
 
+      - name: Restore Gemini CLI credentials
+        env:
+          GEMINI_CONFIG_B64: ${{ secrets.GEMINI_CONFIG_B64 }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+
+          if [[ -n "$GEMINI_CONFIG_B64" ]]; then
+            printf '%s' "$GEMINI_CONFIG_B64" |
+              base64 --decode |
+              tar -xz --no-same-owner -C "$HOME"
+            if [[ ! -d "$HOME/.gemini" ]]; then
+              echo "::error::GEMINI_CONFIG_B64 did not contain a .gemini directory."
+              exit 1
+            fi
+            chmod -R go-rwx "$HOME/.gemini"
+            echo "Gemini CLI configuration and credentials restored to $HOME/.gemini."
+          else
+            echo "::notice::GEMINI_CONFIG_B64 is not set; Gemini CLI directory was not restored."
+          fi
+
+          if [[ -n "$GEMINI_API_KEY" ]]; then
+            install -d -m 0700 "$HOME/.config/d630-runner"
+            printf '%s' "$GEMINI_API_KEY" > "$HOME/.config/d630-runner/gemini-api-key"
+            chmod 0600 "$HOME/.config/d630-runner/gemini-api-key"
+
+            if ! grep -Fq '# D630 Gemini API key' "$HOME/.bashrc"; then
+              cat >> "$HOME/.bashrc" <<'D630_GEMINI_ENV'
+          
+          # D630 Gemini API key.
+          if [[ -r "$HOME/.config/d630-runner/gemini-api-key" ]]; then
+            export GEMINI_API_KEY="$(<"$HOME/.config/d630-runner/gemini-api-key")"
+          fi
+          D630_GEMINI_ENV
+            fi
+
+            printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY" >> "$GITHUB_ENV"
+            echo "Gemini API key installed for subsequent workflow steps and SSH Bash sessions."
+          else
+            echo "::notice::GEMINI_API_KEY is not set; Gemini API-key authentication is unavailable."
+          fi
+
       - name: Install GitHub and Git MCP servers for Agy
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
