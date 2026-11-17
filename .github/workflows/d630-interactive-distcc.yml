@@ -132,7 +132,7 @@ jobs:
           fi
 
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
+          sudo apt-get install --no-upgrade --yes --no-install-recommends \
             openssh-server mosh distcc \
             git gh \
             neovim lf fd-find ripgrep fzf tmux htop jq tree bat less bash-completion \
