@@ -570,7 +570,6 @@ jobs:
           PrintMotd no
           PrintLastLog no
           Banner none
-          TCPKeepAlive yes
           ClientAliveInterval 0
           TCPKeepAlive yes
           MaxSessions 12
