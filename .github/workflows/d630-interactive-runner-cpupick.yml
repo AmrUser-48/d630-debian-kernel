@@ -571,8 +571,7 @@ jobs:
           PrintLastLog no
           Banner none
           TCPKeepAlive yes
-          ClientAliveInterval 30
-          ClientAliveCountMax 6
+          ClientAliveInterval 0
           MaxSessions 12
           EOF
 
@@ -673,78 +672,6 @@ jobs:
           free -h
           echo "Disk:"
           df -h "$GITHUB_WORKSPACE"
-
-      - name: Start Agy browser UI on private Tailscale HTTPS
-        run: |
-          set -Eeuo pipefail
-
-          ENV_DIR="$HOME/.config/d630-runner"
-          WEB_ENV="$ENV_DIR/agy-web.env"
-          {
-            if [[ -s "$ENV_DIR/gh-token" ]]; then
-              printf 'GH_TOKEN=%s\n' "$(<"$ENV_DIR/gh-token")"
-            fi
-            if [[ -s "$ENV_DIR/gemini-api-key" ]]; then
-              printf 'GEMINI_API_KEY=%s\n' "$(<"$ENV_DIR/gemini-api-key")"
-            fi
-          } > "$WEB_ENV"
-          chmod 0600 "$WEB_ENV"
-
-          sudo tee /etc/systemd/system/d630-agy-web.service >/dev/null <<EOF
-          [Unit]
-          Description=Agy browser UI
-          Wants=network-online.target tailscaled.service
-          After=network-online.target tailscaled.service
-
-          [Service]
-          Type=simple
-          User=runner
-          Group=runner
-          Environment=HOME=/home/runner
-          Environment=PATH=/home/runner/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          EnvironmentFile=-/home/runner/.config/d630-runner/agy-web.env
-          WorkingDirectory=$GITHUB_WORKSPACE
-          ExecStart=/usr/bin/agy serve 8080
-          Restart=always
-          RestartSec=2
-          KillSignal=SIGTERM
-          TimeoutStopSec=15
-
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-
-          sudo systemctl daemon-reload
-          sudo systemctl enable --now d630-agy-web.service
-
-          for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:8080/ -o /dev/null; then
-              break
-            fi
-            if ! sudo systemctl is-active --quiet d630-agy-web.service; then
-              sudo journalctl -u d630-agy-web.service -n 80 --no-pager || true
-              echo "::error::Agy web UI failed to start."
-              exit 1
-            fi
-            sleep 1
-          done
-
-          curl --fail --silent http://127.0.0.1:8080/ -o /dev/null || {
-            sudo journalctl -u d630-agy-web.service -n 80 --no-pager || true
-            echo "::error::Agy web UI did not answer on 127.0.0.1:8080."
-            exit 1
-          }
-
-          # Serve is private to this Tailscale network; do not use Funnel.
-          sudo tailscale serve --bg 8080
-          sudo tailscale serve status
-
-          TAILSCALE_DNS="$(sudo tailscale status --json | jq -r '.Self.DNSName // empty' | sed 's/\.$//')"
-          if [[ -n "$TAILSCALE_DNS" ]]; then
-            echo "AGY browser UI: https://$TAILSCALE_DNS/"
-          else
-            echo "AGY browser UI is published through Tailscale Serve; use the HTTPS URL printed above."
-          fi
 
       - name: Keep interactive runner until 10-minute artifact reserve
         run: |
